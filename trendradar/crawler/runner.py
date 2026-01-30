@@ -97,6 +97,7 @@ class CrawlerRunner:
         self._running = False
         self._poll_thread = None
         self._last_results: Dict[str, CrawlResult] = {}
+        self._last_items: Dict[str, List[CrawlerNewsItem]] = {}  # 保存过滤后的条目（含过滤标记）
 
     def _register_crawlers(self, sources: List[Dict]) -> None:
         """注册配置的爬虫"""
@@ -156,6 +157,14 @@ class CrawlerRunner:
             # 过滤处理
             if self.filter_enabled:
                 self._apply_filter(source_id, result.items)
+            else:
+                # 不过滤时，所有条目标记为通过
+                for item in result.items:
+                    item.filtered_out = False
+                    item.matched_keywords = []
+
+            # 保存条目到内存（含过滤标记）
+            self._last_items[source_id] = result.items
 
         return results
 
@@ -248,17 +257,36 @@ class CrawlerRunner:
             条目列表（字典格式）
         """
         max_items = max_items or self.max_display_items
-        items = self.manager.get_items(
-            source_id=source_id,
-            limit=max_items,
-            filtered_only=not include_filtered,
-        )
+
+        # 优先使用内存中的条目（含过滤标记）
+        items = []
+        if self._last_items:
+            if source_id:
+                items = self._last_items.get(source_id, [])
+            else:
+                for src_items in self._last_items.values():
+                    items.extend(src_items)
+        else:
+            # 回退到数据库
+            items = self.manager.get_items(
+                source_id=source_id,
+                limit=max_items,
+                filtered_only=not include_filtered,
+            )
+
+        # 过滤处理
+        if not include_filtered:
+            items = [item for item in items if not item.filtered_out]
+
+        # 截取显示数量
+        items = items[:max_items]
 
         result = []
+        new_seqs = self._get_new_seqs()
         for item in items:
             item_dict = item.to_dict()
             # 添加展示相关字段
-            item_dict["is_new"] = item.seq in self._get_new_seqs()
+            item_dict["is_new"] = item.seq in new_seqs
             item_dict["filter_tag"] = self._get_filter_tag(item) if self.show_filter_tag else ""
             result.append(item_dict)
 

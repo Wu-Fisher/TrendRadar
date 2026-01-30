@@ -70,10 +70,11 @@ rss:
   # - 正整数：覆盖全局设置，只推送此天数内的文章
   # - 0：禁用此频道的新鲜度过滤，推送所有文章
   feeds:
-    - id: "10jqka-realtime"
-      name: "同花顺实时快讯"
-      url: "https://rsshub.rssforever.com/10jqka/realtimenews"
-      max_age_days: 0                 # 不限制文章时间，全部推送
+    # 同花顺实时快讯已改用自定义爬虫获取，RSS 订阅已禁用
+    # - id: "10jqka-realtime"
+    #   name: "同花顺实时快讯"
+    #   url: "https://rsshub.rssforever.com/10jqka/realtimenews"
+    #   max_age_days: 0                 # 不限制文章时间，全部推送
 
 
 # ===============================================================

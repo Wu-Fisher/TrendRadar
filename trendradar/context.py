@@ -115,6 +115,28 @@ class AppContext:
         """获取 RSS 源列表"""
         return self.rss_config.get("FEEDS", [])
 
+    # === 自定义爬虫配置 ===
+
+    @property
+    def custom_crawler_config(self) -> Dict:
+        """获取自定义爬虫配置"""
+        return self.config.get("CRAWLER_CUSTOM", {})
+
+    @property
+    def custom_crawler_enabled(self) -> bool:
+        """自定义爬虫是否启用"""
+        return self.custom_crawler_config.get("ENABLED", False)
+
+    @property
+    def custom_crawler_sources(self) -> List[Dict]:
+        """获取自定义爬虫源列表"""
+        return self.custom_crawler_config.get("SOURCES", [])
+
+    def create_crawler_runner(self):
+        """创建爬虫运行器"""
+        from trendradar.crawler.runner import CrawlerRunner
+        return CrawlerRunner(self.config, ctx=self)
+
     @property
     def display_mode(self) -> str:
         """获取显示模式 (keyword | platform)"""

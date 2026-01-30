@@ -587,6 +587,23 @@ def render_html_content(
                 font-weight: 500;
             }
 
+            .filter-tag {
+                font-size: 11px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                margin-left: 4px;
+            }
+
+            .filter-tag.pass {
+                background: #dcfce7;
+                color: #166534;
+            }
+
+            .filter-tag.filtered {
+                background: #fee2e2;
+                color: #991b1b;
+            }
+
             .rss-title {
                 font-size: 14px;
                 line-height: 1.5;
@@ -1063,6 +1080,12 @@ def render_html_content(
 
                 if is_new:
                     rss_html += '<span class="rss-author" style="color: #dc2626;">NEW</span>'
+
+                # 显示过滤标签（自定义爬虫特有）
+                filter_tag = title_data.get("filter_tag", "")
+                if filter_tag:
+                    tag_class = "filtered" if "🚫" in filter_tag else "pass"
+                    rss_html += f'<span class="filter-tag {tag_class}">{html_escape(filter_tag)}</span>'
 
                 rss_html += """
                             </div>

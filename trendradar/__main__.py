@@ -1417,18 +1417,233 @@ class NewsAnalyzer:
             print(f"[RSS] 生成 HTML 报告失败: {e}")
             return None
 
+    def _crawl_custom_data(self) -> Tuple[Optional[List[Dict]], Optional[List[Dict]], Optional[List[Dict]]]:
+        """
+        执行自定义爬虫数据抓取
+
+        Returns:
+            (custom_items, custom_new_items, raw_custom_items) 元组：
+            - custom_items: 统计条目列表（按模式处理，用于统计区块）
+            - custom_new_items: 新增条目列表（用于新增区块）
+            - raw_custom_items: 原始爬虫条目列表（用于独立展示区）
+            如果未启用或失败返回 (None, None, None)
+        """
+        if not self.ctx.custom_crawler_enabled:
+            return None, None, None
+
+        try:
+            # 创建爬虫运行器
+            runner = self.ctx.create_crawler_runner()
+
+            # 执行一次爬取
+            results = runner.crawl_once()
+
+            if not results:
+                print("[CustomCrawler] 没有获取到数据")
+                return None, None, None
+
+            # 统计新增条目数
+            total_count = 0
+            new_count = 0
+            for source_id, result in results.items():
+                if result.status.value == "success":
+                    total_count += result.total_count
+                    new_count += result.new_count
+
+            if new_count > 0:
+                print(f"[CustomCrawler] 发现 {new_count} 条新增（共 {total_count} 条）")
+
+            # 获取用于展示的条目
+            raw_items = runner.get_items_for_display(include_filtered=True)
+
+            # 按模式处理数据
+            return self._process_custom_data_by_mode(runner, results, raw_items)
+
+        except ImportError as e:
+            print(f"[CustomCrawler] 缺少依赖: {e}")
+            return None, None, None
+        except Exception as e:
+            print(f"[CustomCrawler] 抓取失败: {e}")
+            if self.ctx.config.get("DEBUG", False):
+                import traceback
+                traceback.print_exc()
+            return None, None, None
+
+    def _process_custom_data_by_mode(
+        self,
+        runner,
+        results: Dict,
+        raw_items: List[Dict]
+    ) -> Tuple[Optional[List[Dict]], Optional[List[Dict]], Optional[List[Dict]]]:
+        """
+        按报告模式处理自定义爬虫数据
+
+        三种模式：
+        - incremental: 增量模式，统计=新增条目
+        - current: 当前榜单，统计=当前批次条目
+        - daily: 当日汇总，统计=当天所有条目
+
+        Returns:
+            (custom_stats, custom_new_stats, raw_custom_items)
+        """
+        from trendradar.core.analyzer import count_rss_frequency
+
+        # 加载关键词配置
+        try:
+            word_groups, filter_words, global_filters = self.ctx.load_frequency_words()
+        except FileNotFoundError:
+            word_groups, filter_words, global_filters = [], [], []
+
+        timezone = self.ctx.timezone
+        max_news_per_keyword = self.ctx.config.get("MAX_NEWS_PER_KEYWORD", 0)
+        sort_by_position_first = self.ctx.config.get("SORT_BY_POSITION_FIRST", False)
+
+        # 转换为 RSS 兼容格式用于 count_rss_frequency
+        def convert_to_rss_format(items: List[Dict]) -> List[Dict]:
+            """转换爬虫条目为 RSS 格式"""
+            rss_items = []
+            for item in items:
+                rss_items.append({
+                    "title": item.get("title", ""),
+                    "feed_id": item.get("source_id", "custom"),
+                    "feed_name": item.get("source_name", "自定义爬虫"),
+                    "url": item.get("url", ""),
+                    "published_at": item.get("published_at", ""),
+                    "summary": item.get("summary", ""),
+                    "author": item.get("author", ""),
+                    # 自定义字段
+                    "full_content": item.get("full_content", ""),
+                    "is_new": item.get("is_new", False),
+                    "filter_tag": item.get("filter_tag", ""),
+                    "filtered_out": item.get("filtered_out", False),
+                    "matched_keywords": item.get("matched_keywords", []),
+                })
+            return rss_items
+
+        # 获取新增条目
+        new_items = [item for item in raw_items if item.get("is_new", False)]
+        raw_rss_items = convert_to_rss_format(raw_items)
+        new_rss_items = convert_to_rss_format(new_items) if new_items else None
+
+        custom_stats = None
+        custom_new_stats = None
+
+        if self.report_mode == "incremental":
+            # 增量模式：只处理新增条目
+            if not new_rss_items:
+                print("[CustomCrawler] 增量模式：没有新增条目")
+                return None, None, raw_rss_items
+
+            custom_stats, _ = count_rss_frequency(
+                rss_items=new_rss_items,
+                word_groups=word_groups,
+                filter_words=filter_words,
+                global_filters=global_filters,
+                new_items=new_rss_items,
+                max_news_per_keyword=max_news_per_keyword,
+                sort_by_position_first=sort_by_position_first,
+                timezone=timezone,
+                rank_threshold=self.rank_threshold,
+                quiet=False,
+            )
+
+        elif self.report_mode == "current":
+            # 当前榜单模式：处理当前批次所有条目
+            custom_stats, _ = count_rss_frequency(
+                rss_items=raw_rss_items,
+                word_groups=word_groups,
+                filter_words=filter_words,
+                global_filters=global_filters,
+                new_items=new_rss_items,
+                max_news_per_keyword=max_news_per_keyword,
+                sort_by_position_first=sort_by_position_first,
+                timezone=timezone,
+                rank_threshold=self.rank_threshold,
+                quiet=False,
+            )
+
+            # 新增条目统计
+            if new_rss_items:
+                custom_new_stats, _ = count_rss_frequency(
+                    rss_items=new_rss_items,
+                    word_groups=word_groups,
+                    filter_words=filter_words,
+                    global_filters=global_filters,
+                    new_items=new_rss_items,
+                    max_news_per_keyword=max_news_per_keyword,
+                    sort_by_position_first=sort_by_position_first,
+                    timezone=timezone,
+                    rank_threshold=self.rank_threshold,
+                    quiet=True,
+                )
+
+        else:  # daily 模式
+            # 当日汇总：处理所有条目
+            custom_stats, _ = count_rss_frequency(
+                rss_items=raw_rss_items,
+                word_groups=word_groups,
+                filter_words=filter_words,
+                global_filters=global_filters,
+                new_items=new_rss_items,
+                max_news_per_keyword=max_news_per_keyword,
+                sort_by_position_first=sort_by_position_first,
+                timezone=timezone,
+                rank_threshold=self.rank_threshold,
+                quiet=False,
+            )
+
+            # 新增条目统计
+            if new_rss_items:
+                custom_new_stats, _ = count_rss_frequency(
+                    rss_items=new_rss_items,
+                    word_groups=word_groups,
+                    filter_words=filter_words,
+                    global_filters=global_filters,
+                    new_items=new_rss_items,
+                    max_news_per_keyword=max_news_per_keyword,
+                    sort_by_position_first=sort_by_position_first,
+                    timezone=timezone,
+                    rank_threshold=self.rank_threshold,
+                    quiet=True,
+                )
+
+        return custom_stats, custom_new_stats, raw_rss_items
+
     def _execute_mode_strategy(
         self, mode_strategy: Dict, results: Dict, id_to_name: Dict, failed_ids: List,
         rss_items: Optional[List[Dict]] = None,
         rss_new_items: Optional[List[Dict]] = None,
         raw_rss_items: Optional[List[Dict]] = None,
+        custom_items: Optional[List[Dict]] = None,
+        custom_new_items: Optional[List[Dict]] = None,
+        raw_custom_items: Optional[List[Dict]] = None,
     ) -> Optional[str]:
-        """执行模式特定逻辑，支持热榜+RSS合并推送
+        """执行模式特定逻辑，支持热榜+RSS+自定义爬虫合并推送
 
         简化后的逻辑：
         - 每次运行都生成 HTML 报告（时间戳快照 + latest/{mode}.html + index.html）
         - 根据模式发送通知
         """
+        # 合并 custom_items 到 rss_items（使用相同格式）
+        # 这样可以复用现有的 RSS 渲染和推送逻辑
+        if custom_items:
+            if rss_items:
+                rss_items = rss_items + custom_items
+            else:
+                rss_items = custom_items
+
+        if custom_new_items:
+            if rss_new_items:
+                rss_new_items = rss_new_items + custom_new_items
+            else:
+                rss_new_items = custom_new_items
+
+        if raw_custom_items:
+            if raw_rss_items:
+                raw_rss_items = raw_rss_items + raw_custom_items
+            else:
+                raw_rss_items = raw_custom_items
+
         # 获取当前监控平台ID列表
         current_platform_ids = self.ctx.platform_ids
 
@@ -1616,11 +1831,16 @@ class NewsAnalyzer:
             # 抓取 RSS 数据（如果启用），返回统计条目、新增条目和原始条目
             rss_items, rss_new_items, raw_rss_items = self._crawl_rss_data()
 
-            # 执行模式策略，传递 RSS 数据用于合并推送
+            # 抓取自定义爬虫数据（如果启用）
+            custom_items, custom_new_items, raw_custom_items = self._crawl_custom_data()
+
+            # 执行模式策略，传递所有数据用于合并推送
             self._execute_mode_strategy(
                 mode_strategy, results, id_to_name, failed_ids,
                 rss_items=rss_items, rss_new_items=rss_new_items,
-                raw_rss_items=raw_rss_items
+                raw_rss_items=raw_rss_items,
+                custom_items=custom_items, custom_new_items=custom_new_items,
+                raw_custom_items=raw_custom_items
             )
 
         except Exception as e:
