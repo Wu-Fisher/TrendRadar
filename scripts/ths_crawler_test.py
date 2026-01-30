@@ -68,6 +68,26 @@ class THSNewsCrawler:
         if not url:
             return None, "URL 为空"
 
+        # 尝试的 URL 列表（原始 URL + 可能的备选 URL）
+        urls_to_try = [url]
+
+        # 如果是 news.10jqka.com.cn 域名（Next.js SPA，无法直接解析）
+        # 尝试转换为 stock.10jqka.com.cn
+        if 'news.10jqka.com.cn' in url:
+            alt_url = url.replace('news.10jqka.com.cn', 'stock.10jqka.com.cn')
+            urls_to_try.append(alt_url)
+
+        last_error = ""
+        for try_url in urls_to_try:
+            content, status = self._fetch_content_from_url(try_url)
+            if content:
+                return content, status
+            last_error = status
+
+        return None, last_error
+
+    def _fetch_content_from_url(self, url: str) -> tuple[Optional[str], str]:
+        """从指定 URL 获取内容的内部方法"""
         try:
             resp = self.session.get(url, timeout=10)
             resp.encoding = 'gbk'
