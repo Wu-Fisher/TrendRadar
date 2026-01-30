@@ -2,6 +2,7 @@
 """
 同花顺7x24小时要闻直播爬虫 - 改进版详细日志测试
 修复：添加缓存绕过机制
+功能：获取新闻列表 + 抓取每条新闻的完整内容
 输出：详细日志 + 完整消息列表（用于与原网页对比）
 """
 
@@ -12,6 +13,14 @@ import time
 from datetime import datetime
 from typing import Optional
 import pytz
+
+try:
+    from bs4 import BeautifulSoup
+    HAS_BS4 = True
+except ImportError:
+    HAS_BS4 = False
+    print("警告: 未安装 beautifulsoup4，无法获取新闻完整内容")
+    print("安装命令: pip install beautifulsoup4")
 
 
 class THSNewsCrawler:
@@ -51,6 +60,67 @@ class THSNewsCrawler:
         except Exception as e:
             return None, f"未知错误: {e}"
 
+    def fetch_full_content(self, url: str) -> tuple[Optional[str], str]:
+        """获取新闻详情页的完整内容"""
+        if not HAS_BS4:
+            return None, "未安装 beautifulsoup4"
+
+        if not url:
+            return None, "URL 为空"
+
+        try:
+            resp = self.session.get(url, timeout=10)
+            resp.encoding = 'gbk'
+
+            soup = BeautifulSoup(resp.text, 'html.parser')
+
+            # 找正文容器 (class="main-text" 或 class="atc-content")
+            content_div = soup.find('div', class_='main-text')
+            if not content_div:
+                content_div = soup.find('div', class_='atc-content')
+
+            if not content_div:
+                return None, "未找到正文容器"
+
+            # 移除脚本和样式标签
+            for tag in content_div.find_all(['script', 'style']):
+                tag.decompose()
+
+            # 提取所有 p 标签的文本
+            paragraphs = content_div.find_all('p')
+            if paragraphs:
+                # 过滤掉广告和无关内容
+                texts = []
+                for p in paragraphs:
+                    text = p.get_text(strip=True)
+                    # 跳过常见的广告/无关文本
+                    if text and not text.startswith('关注同花顺财经') and len(text) > 5:
+                        texts.append(text)
+                if texts:
+                    # 去重（有时内容会重复）
+                    seen = set()
+                    unique_texts = []
+                    for t in texts:
+                        if t not in seen:
+                            seen.add(t)
+                            unique_texts.append(t)
+                    full_text = '\n'.join(unique_texts)
+                    return full_text, "成功"
+
+            # 如果没有 p 标签，直接提取文本
+            text = content_div.get_text(separator='\n', strip=True)
+            if text:
+                return text, "成功(直接提取)"
+
+            return None, "正文为空"
+
+        except requests.exceptions.Timeout:
+            return None, "请求超时"
+        except requests.exceptions.ConnectionError as e:
+            return None, f"连接错误"
+        except Exception as e:
+            return None, f"错误: {e}"
+
     def parse_jsonp(self, raw_data: str) -> tuple[Optional[dict], str]:
         """解析 JSONP 数据"""
         try:
@@ -87,7 +157,8 @@ class THSNewsCrawler:
         return {
             "seq": item.get("seq"),
             "title": item.get("title", "").strip(),
-            "content": item.get("content", "").strip(),
+            "content": item.get("content", "").strip(),  # 摘要
+            "full_content": "",  # 完整内容（需要单独获取）
             "url": item.get("url", ""),
             "pub_date": item.get("pubDate", ""),
             "source": item.get("source", ""),
@@ -126,6 +197,56 @@ class THSNewsCrawler:
                     new_items.append(item)
 
         return new_items, all_items, fetch_status, parse_status, data_pub_time
+
+    def fetch_all_full_contents(self, delay: float = 0.3, log_func=None) -> dict:
+        """批量获取所有新闻的完整内容
+
+        Args:
+            delay: 每次请求之间的延迟（秒），避免请求过快
+            log_func: 日志输出函数，可选
+
+        Returns:
+            统计信息 {"success": 成功数, "failed": 失败数, "skipped": 跳过数}
+        """
+        if not HAS_BS4:
+            if log_func:
+                log_func("  ⚠️ 未安装 beautifulsoup4，跳过获取完整内容")
+            return {"success": 0, "failed": 0, "skipped": len(self.all_news)}
+
+        stats = {"success": 0, "failed": 0, "skipped": 0}
+        total = len(self.all_news)
+
+        for i, (seq, item) in enumerate(self.all_news.items(), 1):
+            # 如果已经有完整内容，跳过
+            if item.get("full_content"):
+                stats["skipped"] += 1
+                continue
+
+            url = item.get("url", "")
+            if not url:
+                stats["skipped"] += 1
+                continue
+
+            if log_func:
+                log_func(f"  [{i}/{total}] 获取 seq={seq} ...", end="")
+
+            full_content, status = self.fetch_full_content(url)
+
+            if full_content:
+                item["full_content"] = full_content
+                stats["success"] += 1
+                if log_func:
+                    log_func(f" ✓ ({len(full_content)}字)")
+            else:
+                stats["failed"] += 1
+                if log_func:
+                    log_func(f" ✗ ({status})")
+
+            # 延迟，避免请求过快
+            if i < total:
+                time.sleep(delay)
+
+        return stats
 
 
 def format_news_detail(item: dict, indent: str = "    ") -> str:
@@ -274,6 +395,23 @@ def main():
             log("测试期间无新增消息")
 
         log("")
+
+        # ========== 获取完整内容 ==========
+        log("=" * 80)
+        log("开始获取新闻完整内容...")
+        log("=" * 80)
+
+        def log_inline(msg: str, end: str = "\n"):
+            """支持不换行的日志"""
+            print(msg, end=end, flush=True)
+            f.write(msg + end)
+            f.flush()
+
+        stats = crawler.fetch_all_full_contents(delay=0.3, log_func=log_inline)
+        log("")
+        log(f"获取完成: 成功 {stats['success']} 条, 失败 {stats['failed']} 条, 跳过 {stats['skipped']} 条")
+
+        log("")
         log("=" * 80)
         log(f"完整消息列表已输出到: {news_list_file}")
         log("=" * 80)
@@ -301,7 +439,9 @@ def main():
                 f.write(f"股票: {item['stock_code']}\n")
             if item['implevel']:
                 f.write(f"重要: {item['implevel']}\n")
-            f.write(f"内容: {item['content']}\n")
+            # 优先使用完整内容，如果没有则使用摘要
+            content = item.get('full_content') or item.get('content', '')
+            f.write(f"内容: {content}\n")
             f.write("\n")
 
         f.write("=" * 80 + "\n")
