@@ -161,3 +161,49 @@ volumes:
 ```bash
 docker compose down && docker compose up -d trendradar
 ```
+
+### 2025-01-30: 同花顺7x24爬虫开发
+
+**背景**：RSS 订阅不稳定，直接爬取同花顺7x24小时要闻。
+
+**数据源**：
+- 列表接口：`http://stock.10jqka.com.cn/thsgd/realtimenews.js`
+- 格式：JSONP + GBK 编码
+- 返回：100 条最新新闻
+
+**开发文件**：`scripts/ths_crawler_test.py`
+
+**功能**：
+| 功能 | 状态 |
+|------|------|
+| JSONP 解析（非标准 JSON） | ✅ |
+| CDN 缓存绕过（时间戳参数） | ✅ |
+| 增量新闻检测（seq 序号） | ✅ |
+| 完整内容获取（详情页爬取） | ✅ |
+| news 域名兼容（自动转换 stock） | ✅ |
+| 集成到主项目 | ⏳ 待做 |
+| 接入通知模块 | ⏳ 待做 |
+
+**使用方法**：
+```bash
+# 安装依赖
+pip install beautifulsoup4
+
+# 运行测试（默认10分钟）
+python scripts/ths_crawler_test.py
+
+# 输出文件
+output/ths_crawler_test_log_v2.txt   # 详细日志
+output/ths_crawler_news_list.txt     # 完整消息列表
+```
+
+**技术要点**：
+1. **缓存绕过**：URL 添加 `?v={timestamp}` + Cache-Control 头
+2. **JSON 修复**：外层属性名无引号，用正则添加
+3. **域名兼容**：`news.10jqka.com.cn` 是 Next.js SPA，需转换到 `stock.10jqka.com.cn`
+
+**相关提交**：
+- `94d7022` feat: 添加同花顺7x24小时要闻爬虫测试脚本
+- `bae5fa8` refactor: 清理爬虫脚本，只保留可用版本
+- `774e1b1` feat: 添加新闻完整内容获取功能
+- `35068eb` fix: 优化 news 域名页面的内容获取
