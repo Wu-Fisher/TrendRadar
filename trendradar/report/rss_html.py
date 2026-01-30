@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Callable
 
 from trendradar.report.helpers import html_escape
+from trendradar.utils.time import format_iso_time_friendly
 
 
 def render_rss_html_content(
@@ -16,6 +17,7 @@ def render_rss_html_content(
     total_count: int,
     feeds_info: Optional[Dict[str, str]] = None,
     *,
+    timezone: str = "Asia/Shanghai",
     get_time_func: Optional[Callable[[], datetime]] = None,
 ) -> str:
     """渲染 RSS HTML 内容
@@ -358,7 +360,8 @@ def render_rss_html_content(
                         <div class="rss-meta">"""
 
             if published_at:
-                html += f'<span class="rss-time">{html_escape(published_at)}</span>'
+                friendly_time = format_iso_time_friendly(published_at, timezone)
+                html += f'<span class="rss-time">{html_escape(friendly_time)}</span>'
 
             if author:
                 html += f'<span class="rss-author">by {html_escape(author)}</span>'

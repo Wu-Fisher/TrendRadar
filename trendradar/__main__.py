@@ -1396,6 +1396,7 @@ class NewsAnalyzer:
                 rss_items=rss_items,
                 total_count=len(rss_items),
                 feeds_info=feeds_info,
+                timezone=self.ctx.timezone,
                 get_time_func=self.ctx.get_time,
             )
 

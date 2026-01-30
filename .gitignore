@@ -1,0 +1,87 @@
+# ═══════════════════════════════════════════════════════════════
+#                    TrendRadar .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ── 虚拟环境 ──────────────────────────────────────────────────
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── 运行输出 ──────────────────────────────────────────────────
+output/
+
+# ── IDE / 编辑器 ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ── 系统文件 ──────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── 日志 & 临时文件 ────────────────────────────────────────────
+*.log
+*.tmp
+*.temp
+*.bak
+
+# ── 测试 & 缓存 ────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# ── Docker 本地配置 ────────────────────────────────────────────
+docker/.env
+docker/.vscode/
+docker/1ms-helper
+
+# ── 敏感配置（本地修改）──────────────────────────────────────
+# 如果 config.yaml 包含敏感信息，取消下面这行的注释
+# config/config.yaml
+
+# ── Claude Code ───────────────────────────────────────────────
+.claude/
+
+# ── 本地临时脚本 ──────────────────────────────────────────────
+test_*.py

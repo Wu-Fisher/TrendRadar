@@ -344,6 +344,7 @@ class AppContext:
             ai_analysis=ai_analysis,
             show_new_section=self.show_new_section,
             standalone_data=standalone_data,
+            timezone=self.timezone,
         )
 
     # === 通知内容渲染 ===
