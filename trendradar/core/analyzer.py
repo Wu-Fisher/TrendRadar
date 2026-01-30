@@ -552,8 +552,14 @@ def count_rss_frequency(
     # 如果没有配置词组，创建一个包含所有条目的虚拟词组
     if not word_groups:
         if not quiet:
-            print("[RSS] 频率词配置为空，将显示所有 RSS 条目")
-        word_groups = [{"required": [], "normal": [], "group_key": "全部 RSS"}]
+            print("[RSS] 频率词配置为空，将显示所有条目")
+        # 检查第一个条目的 feed_name 来决定组名
+        default_group_name = "全部 RSS"
+        if rss_items:
+            first_feed_name = rss_items[0].get("feed_name", "")
+            if first_feed_name and first_feed_name != "RSS":
+                default_group_name = first_feed_name
+        word_groups = [{"required": [], "normal": [], "group_key": default_group_name}]
         filter_words = []
 
     # 创建新增条目的 URL 集合，用于快速查找
@@ -602,8 +608,13 @@ def count_rss_frequency(
             normal_words = group["normal"]
             group_key = group["group_key"]
 
-            # "全部 RSS" 模式：所有条目都匹配
-            if len(word_groups) == 1 and word_groups[0]["group_key"] == "全部 RSS":
+            # "全部" 模式：所有条目都匹配（当只有一个默认组时）
+            # 检测条件：只有一个组，且组名不是用户配置的关键词组
+            default_group_names = ["全部 RSS", "同花顺快讯"]
+            if len(word_groups) == 1 and (
+                word_groups[0]["group_key"] in default_group_names or
+                (not word_groups[0].get("required") and not word_groups[0].get("normal"))
+            ):
                 matched = True
             else:
                 # 检查必须词（支持正则语法）

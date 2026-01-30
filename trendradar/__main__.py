@@ -1488,11 +1488,9 @@ class NewsAnalyzer:
         """
         from trendradar.core.analyzer import count_rss_frequency
 
-        # 加载关键词配置
-        try:
-            word_groups, filter_words, global_filters = self.ctx.load_frequency_words()
-        except FileNotFoundError:
-            word_groups, filter_words, global_filters = [], [], []
+        # 自定义爬虫数据：不使用 word_groups 过滤（过滤已在爬虫中完成）
+        # 使用空 word_groups 让所有条目都显示，只依赖爬虫设置的 filter_tag
+        word_groups, filter_words, global_filters = [], [], []
 
         timezone = self.ctx.timezone
         max_news_per_keyword = self.ctx.config.get("MAX_NEWS_PER_KEYWORD", 0)
@@ -1506,7 +1504,7 @@ class NewsAnalyzer:
                 rss_items.append({
                     "title": item.get("title", ""),
                     "feed_id": item.get("source_id", "custom"),
-                    "feed_name": item.get("source_name", "自定义爬虫"),
+                    "feed_name": item.get("source_name", "同花顺快讯"),  # 改名
                     "url": item.get("url", ""),
                     "published_at": item.get("published_at", ""),
                     "summary": item.get("summary", ""),

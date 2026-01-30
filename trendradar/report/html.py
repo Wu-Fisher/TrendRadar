@@ -1033,6 +1033,20 @@ def render_html_content(
         if not stats:
             return ""
 
+        # 检查是否为自定义爬虫数据（有 filter_tag 字段）
+        # 如果有 filter_tag，使用 "自定义爬虫" 作为标题
+        is_custom_crawler = False
+        for stat in stats:
+            for title_data in stat.get("titles", []):
+                if title_data.get("filter_tag"):
+                    is_custom_crawler = True
+                    break
+            if is_custom_crawler:
+                break
+
+        if is_custom_crawler:
+            title = "自定义爬虫"
+
         # 计算总条目数
         total_count = sum(stat.get("count", 0) for stat in stats)
         if total_count == 0:
