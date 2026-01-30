@@ -1,13 +1,16 @@
 # TrendRadar 部署指南
 
+> 最后更新: 2026-01-31
+
 ## 当前配置
 
 | 配置项 | 值 |
 |--------|-----|
-| 数据源 | 财联社热门 + 同花顺RSS |
-| RSS 地址 | `https://rsshub.rssforever.com/10jqka/realtimenews` |
-| 执行频率 | 每 2 分钟 |
-| 推送模式 | incremental（增量更新，只推送新内容） |
+| 数据源 | **自定义爬虫（同花顺7x24）** |
+| 热榜平台 | 财联社热门（保留但非主要） |
+| RSS 订阅 | 已禁用 |
+| 执行频率 | 每 30 分钟 |
+| 推送模式 | incremental（增量更新） |
 | 版本检查 | 已禁用 |
 | AI 分析 | 已禁用 |
 | Web 查看 | http://localhost:8080 |
@@ -162,48 +165,40 @@ volumes:
 docker compose down && docker compose up -d trendradar
 ```
 
-### 2025-01-30: 同花顺7x24爬虫开发
+### 2025-01-31: 自定义爬虫集成完成
 
-**背景**：RSS 订阅不稳定，直接爬取同花顺7x24小时要闻。
-
-**数据源**：
-- 列表接口：`http://stock.10jqka.com.cn/thsgd/realtimenews.js`
-- 格式：JSONP + GBK 编码
-- 返回：100 条最新新闻
-
-**开发文件**：`scripts/ths_crawler_test.py`
+**重大更新**：替换 RSS 订阅为自定义爬虫。
 
 **功能**：
 | 功能 | 状态 |
 |------|------|
-| JSONP 解析（非标准 JSON） | ✅ |
-| CDN 缓存绕过（时间戳参数） | ✅ |
-| 增量新闻检测（seq 序号） | ✅ |
-| 完整内容获取（详情页爬取） | ✅ |
-| news 域名兼容（自动转换 stock） | ✅ |
-| 集成到主项目 | ⏳ 待做 |
-| 接入通知模块 | ⏳ 待做 |
+| 同花顺7x24新闻爬取 | ✅ |
+| 三层过滤（标题+摘要+内容） | ✅ |
+| 独立增量检测 | ✅ |
+| 过滤标签显示（✓/🚫） | ✅ |
+| 邮件推送 | ✅ |
+| HTML 报告 | ✅ |
 
-**使用方法**：
-```bash
-# 安装依赖
-pip install beautifulsoup4
+**显示名称**：
+- 区域标题：`自定义爬虫`
+- 分组名称：`同花顺快讯`
 
-# 运行测试（默认10分钟）
-python scripts/ths_crawler_test.py
-
-# 输出文件
-output/ths_crawler_test_log_v2.txt   # 详细日志
-output/ths_crawler_news_list.txt     # 完整消息列表
-```
-
-**技术要点**：
-1. **缓存绕过**：URL 添加 `?v={timestamp}` + Cache-Control 头
-2. **JSON 修复**：外层属性名无引号，用正则添加
-3. **域名兼容**：`news.10jqka.com.cn` 是 Next.js SPA，需转换到 `stock.10jqka.com.cn`
+**修改文件**：
+- `trendradar/__main__.py` - 集成自定义爬虫
+- `trendradar/report/html.py` - 显示名称自动检测
+- `trendradar/core/analyzer.py` - 分组名称优化
 
 **相关提交**：
-- `94d7022` feat: 添加同花顺7x24小时要闻爬虫测试脚本
-- `bae5fa8` refactor: 清理爬虫脚本，只保留可用版本
-- `774e1b1` feat: 添加新闻完整内容获取功能
-- `35068eb` fix: 优化 news 域名页面的内容获取
+- `2ff6d68` feat: 实现自定义爬虫框架
+- `e2ff2b7` feat: 集成到主流程
+- `98c4a71` fix: 修复过滤标签显示
+
+---
+
+## 文档索引
+
+| 文档 | 说明 |
+|------|------|
+| `docs/CRAWLER_DESIGN.md` | 爬虫模块设计与架构图 |
+| `docs/DEVELOPMENT_STATUS.md` | 开发进度与需求清单 |
+| `docs/TROUBLESHOOTING.md` | 问题解决方案清单 |
