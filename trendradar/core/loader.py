@@ -320,6 +320,35 @@ def _load_storage_config(config_data: Dict) -> Dict:
     }
 
 
+def _load_crawler_custom_config(config_data: Dict) -> Dict:
+    """加载自定义爬虫配置"""
+    crawler_custom = config_data.get("crawler_custom", {})
+    full_content = crawler_custom.get("full_content", {})
+    storage = crawler_custom.get("storage", {})
+    filter_config = crawler_custom.get("filter", {})
+
+    return {
+        "ENABLED": crawler_custom.get("enabled", False),
+        "POLL_INTERVAL": crawler_custom.get("poll_interval", 10),
+        "FULL_CONTENT": {
+            "ENABLED": full_content.get("enabled", True),
+            "ASYNC_MODE": full_content.get("async_mode", True),
+            "FETCH_DELAY": full_content.get("fetch_delay", 0.3),
+            "TIMEOUT": full_content.get("timeout", 10),
+        },
+        "SOURCES": crawler_custom.get("sources", []),
+        "STORAGE": {
+            "MAX_ITEMS": storage.get("max_items", 10000),
+            "MAX_DAYS": storage.get("max_days", 30),
+            "MAX_DISPLAY_ITEMS": storage.get("max_display_items", 100),
+        },
+        "FILTER": {
+            "ENABLED": filter_config.get("enabled", True),
+            "SHOW_TAG": filter_config.get("show_tag", True),
+        },
+    }
+
+
 def _load_webhook_config(config_data: Dict) -> Dict:
     """加载 Webhook 配置"""
     notification = config_data.get("notification", {})
@@ -515,6 +544,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     # 存储配置
     config["STORAGE"] = _load_storage_config(config_data)
+
+    # 自定义爬虫配置
+    config["CRAWLER_CUSTOM"] = _load_crawler_custom_config(config_data)
 
     # Webhook 配置
     config.update(_load_webhook_config(config_data))

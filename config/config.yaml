@@ -468,3 +468,41 @@ advanced:
     slack: 4000
   batch_send_interval: 3              # 批次发送间隔（秒）
   feishu_message_separator: "━━━━━━━━━━━━━━━━━━━"
+
+
+# ===============================================================
+# 12. 自定义爬虫配置
+#
+# 直接爬取新闻网站，替代 RSS 订阅方式
+# 支持：同花顺7x24、未来可扩展其他数据源
+# ===============================================================
+crawler_custom:
+  enabled: true                       # 是否启用自定义爬虫
+  poll_interval: 10                   # 轮询间隔（秒），默认 10 秒
+
+  # 完整内容获取配置
+  full_content:
+    enabled: true                     # 是否获取新闻完整内容
+    async_mode: true                  # 异步模式（获取列表后立即推送，内容后台获取）
+    fetch_delay: 0.3                  # 获取间隔（秒），避免请求过快
+    timeout: 10                       # 单次请求超时（秒）
+
+  # 数据源配置
+  # type 可选值: ths (同花顺)
+  sources:
+    - id: "ths-realtime"
+      name: "同花顺7x24"
+      type: "ths"
+      enabled: true
+
+  # 数据存储配置
+  storage:
+    max_items: 10000                  # 最大条目数（超过则清理旧数据）
+    max_days: 30                      # 最大保留天数
+    max_display_items: 100            # 网页最大显示条目数
+
+  # 过滤配置
+  filter:
+    enabled: true                     # 是否启用关键词过滤
+    show_tag: true                    # 是否显示过滤标签（调试用）
+

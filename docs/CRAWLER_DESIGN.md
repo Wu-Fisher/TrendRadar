@@ -1,0 +1,557 @@
+# TrendRadar 爬虫模块设计文档
+
+> Version: 1.1.0
+> Date: 2026-01-30
+> Status: ✅ 已实现
+
+## 1. 需求分析
+
+### 1.1 核心需求
+
+| 编号 | 需求 | 优先级 | 说明 |
+|------|------|--------|------|
+| R1 | 可扩展爬虫架构 | P0 | 支持通过注册机制接入多个新闻网站 |
+| R2 | 10秒轮询频率 | P0 | 默认10秒，可配置 |
+| R3 | 异步完整内容获取 | P0 | 实时推送，不等待所有内容获取完成 |
+| R4 | 严格异常处理 | P0 | 所有解析/网络错误需记录，支持后续排查 |
+| R5 | 过滤机制对接 | P0 | 支持标题、摘要、完整内容的关键词过滤 |
+| R6 | 增量机制修复 | P0 | 不依赖"财联社热门"板块 |
+| R7 | 网页显示改造 | P1 | 最大100条历史，显示增量标记 |
+| R8 | 数据库分离存储 | P1 | 过滤前/过滤后分开存储 |
+| R9 | AI分析接口预留 | P2 | 预留异步分析和结果填充 |
+
+### 1.2 当前架构分析
+
+```
+现有架构:
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│ RSS Fetcher │────▶│ RSS Parser   │────▶│ Storage     │
+└─────────────┘     └──────────────┘     └─────────────┘
+                            │
+                            ▼
+                    ┌──────────────┐
+                    │ Frequency    │
+                    │ Filter       │
+                    └──────────────┘
+```
+
+**问题**:
+1. RSS 依赖第三方 RSSHub 服务，可能不稳定
+2. 无法获取新闻完整内容
+3. 增量检测依赖热榜平台配置
+
+## 2. 架构设计
+
+### 2.1 新爬虫架构
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    Crawler Manager                              │
+│  - 10秒轮询调度                                                  │
+│  - 爬虫注册管理                                                  │
+│  - 统一错误处理                                                  │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│                    Base Crawler (Abstract)                      │
+│  + fetch_news_list() -> List[NewsItem]                         │
+│  + fetch_full_content(url) -> str                              │
+│  + get_source_id() -> str                                      │
+│  + get_source_name() -> str                                    │
+└────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌─────────────────────────┐     ┌─────────────────────────┐
+│ THSCrawler              │     │ FutureCrawler...        │
+│ (同花顺7x24)            │     │ (预留扩展)               │
+└─────────────────────────┘     └─────────────────────────┘
+```
+
+### 2.2 数据流
+
+```
+┌──────────┐   10s   ┌──────────────┐   异步   ┌──────────────┐
+│ 爬虫管理 │────────▶│ 获取新闻列表 │────────▶│ 获取完整内容 │
+└──────────┘         └──────────────┘         └──────────────┘
+                              │                       │
+                              ▼                       ▼
+                     ┌──────────────┐        ┌──────────────┐
+                     │ 原始数据库   │        │ 更新内容字段 │
+                     │ (过滤前)     │        │              │
+                     └──────────────┘        └──────────────┘
+                              │
+                              ▼
+                     ┌──────────────┐
+                     │ 关键词过滤   │
+                     │ 标题+摘要+   │
+                     │ 完整内容     │
+                     └──────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+     ┌──────────────┐              ┌──────────────┐
+     │ 过滤后数据库 │              │ 推送/展示    │
+     └──────────────┘              └──────────────┘
+```
+
+### 2.3 核心类设计
+
+#### 2.3.1 BaseCrawler (抽象基类)
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
+from enum import Enum
+
+class FetchStatus(Enum):
+    SUCCESS = "success"
+    NETWORK_ERROR = "network_error"
+    PARSE_ERROR = "parse_error"
+    TIMEOUT = "timeout"
+    UNKNOWN_ERROR = "unknown_error"
+
+@dataclass
+class CrawlerNewsItem:
+    """爬虫新闻条目"""
+    seq: str                      # 唯一序号
+    title: str                    # 标题
+    summary: str                  # 摘要
+    full_content: str = ""        # 完整内容（异步填充）
+    url: str = ""                 # 链接
+    published_at: str = ""        # 发布时间
+    source: str = ""              # 来源
+    extra: Dict[str, Any] = None  # 扩展字段（股票代码等）
+
+    # 状态字段
+    content_fetched: bool = False
+    content_fetch_error: str = ""
+
+@dataclass
+class CrawlResult:
+    """爬取结果"""
+    source_id: str
+    source_name: str
+    items: List[CrawlerNewsItem]
+    status: FetchStatus
+    error_message: str = ""
+    fetch_time: str = ""
+
+class BaseCrawler(ABC):
+    """爬虫基类"""
+
+    @abstractmethod
+    def get_source_id(self) -> str:
+        """返回数据源唯一ID"""
+        pass
+
+    @abstractmethod
+    def get_source_name(self) -> str:
+        """返回数据源显示名称"""
+        pass
+
+    @abstractmethod
+    def fetch_news_list(self) -> CrawlResult:
+        """获取新闻列表"""
+        pass
+
+    @abstractmethod
+    def fetch_full_content(self, item: CrawlerNewsItem) -> tuple[str, FetchStatus]:
+        """获取单条新闻完整内容"""
+        pass
+
+    def supports_full_content(self) -> bool:
+        """是否支持获取完整内容"""
+        return True
+```
+
+#### 2.3.2 CrawlerManager (管理器)
+
+```python
+class CrawlerManager:
+    """爬虫管理器"""
+
+    def __init__(self, config: Dict):
+        self.crawlers: Dict[str, BaseCrawler] = {}
+        self.config = config
+        self.error_log: List[Dict] = []  # 错误日志
+        self.poll_interval = config.get("poll_interval", 10)
+
+    def register(self, crawler: BaseCrawler) -> None:
+        """注册爬虫"""
+        self.crawlers[crawler.get_source_id()] = crawler
+
+    def unregister(self, source_id: str) -> None:
+        """注销爬虫"""
+        self.crawlers.pop(source_id, None)
+
+    def crawl_all(self) -> Dict[str, CrawlResult]:
+        """执行所有已注册爬虫"""
+        results = {}
+        for source_id, crawler in self.crawlers.items():
+            try:
+                result = crawler.fetch_news_list()
+                results[source_id] = result
+            except Exception as e:
+                self.log_error(source_id, "crawl", str(e))
+                results[source_id] = CrawlResult(
+                    source_id=source_id,
+                    source_name=crawler.get_source_name(),
+                    items=[],
+                    status=FetchStatus.UNKNOWN_ERROR,
+                    error_message=str(e)
+                )
+        return results
+
+    def log_error(self, source_id: str, operation: str, error: str) -> None:
+        """记录错误日志"""
+        self.error_log.append({
+            "time": datetime.now().isoformat(),
+            "source_id": source_id,
+            "operation": operation,
+            "error": error
+        })
+```
+
+### 2.4 异常处理机制
+
+```python
+# 错误分类
+class CrawlerError(Exception):
+    """爬虫基础异常"""
+    pass
+
+class NetworkError(CrawlerError):
+    """网络错误"""
+    pass
+
+class ParseError(CrawlerError):
+    """解析错误"""
+    pass
+
+class ContentFetchError(CrawlerError):
+    """内容获取错误"""
+    pass
+
+# 错误日志结构
+error_log_schema = {
+    "id": "自增ID",
+    "timestamp": "发生时间",
+    "source_id": "数据源ID",
+    "operation": "操作类型(fetch_list/fetch_content/parse)",
+    "url": "相关URL",
+    "error_type": "错误类型",
+    "error_message": "错误消息",
+    "stack_trace": "堆栈跟踪",
+    "resolved": "是否已解决"
+}
+```
+
+### 2.5 数据库设计
+
+#### 原始数据表 (crawler_raw)
+
+```sql
+CREATE TABLE IF NOT EXISTS crawler_raw (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    seq TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT,
+    full_content TEXT,
+    url TEXT,
+    published_at TEXT,
+    extra_data TEXT,  -- JSON
+    crawl_time TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    content_fetched INTEGER DEFAULT 0,
+    content_fetch_error TEXT,
+    UNIQUE(source_id, seq)
+);
+
+CREATE INDEX idx_crawler_raw_source ON crawler_raw(source_id);
+CREATE INDEX idx_crawler_raw_time ON crawler_raw(crawl_time);
+CREATE INDEX idx_crawler_raw_first_seen ON crawler_raw(first_seen);
+```
+
+#### 过滤后数据表 (crawler_filtered)
+
+```sql
+CREATE TABLE IF NOT EXISTS crawler_filtered (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    raw_id INTEGER NOT NULL,
+    source_id TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    seq TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT,
+    full_content TEXT,
+    url TEXT,
+    published_at TEXT,
+    matched_keywords TEXT,  -- JSON: 匹配的关键词列表
+    filter_time TEXT NOT NULL,
+    pushed INTEGER DEFAULT 0,
+    push_time TEXT,
+    FOREIGN KEY (raw_id) REFERENCES crawler_raw(id)
+);
+
+CREATE INDEX idx_crawler_filtered_source ON crawler_filtered(source_id);
+CREATE INDEX idx_crawler_filtered_pushed ON crawler_filtered(pushed);
+```
+
+#### 错误日志表 (crawler_errors)
+
+```sql
+CREATE TABLE IF NOT EXISTS crawler_errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    source_id TEXT,
+    operation TEXT NOT NULL,
+    url TEXT,
+    error_type TEXT NOT NULL,
+    error_message TEXT,
+    stack_trace TEXT,
+    resolved INTEGER DEFAULT 0,
+    resolve_note TEXT
+);
+
+CREATE INDEX idx_crawler_errors_time ON crawler_errors(timestamp);
+CREATE INDEX idx_crawler_errors_resolved ON crawler_errors(resolved);
+```
+
+## 3. 配置设计
+
+```yaml
+# config/config.yaml 新增配置段
+
+# ===============================================================
+# 自定义爬虫配置
+# ===============================================================
+crawler:
+  enabled: true
+  poll_interval: 10              # 轮询间隔（秒）
+
+  # 完整内容获取配置
+  full_content:
+    enabled: true                # 是否获取完整内容
+    async_mode: true             # 异步模式（获取列表后立即推送，内容异步更新）
+    fetch_delay: 0.3             # 获取间隔（秒），避免请求过快
+    timeout: 10                  # 单次请求超时（秒）
+    retry_count: 2               # 失败重试次数
+
+  # 数据源配置
+  sources:
+    - id: "ths-realtime"
+      name: "同花顺7x24"
+      enabled: true
+      type: "ths"                # 爬虫类型
+
+  # 数据保留配置
+  storage:
+    max_items: 10000             # 最大条目数
+    max_days: 30                 # 最大保留天数
+
+  # 错误日志
+  error_log:
+    enabled: true
+    max_entries: 1000            # 最大日志条目
+```
+
+## 4. 过滤机制增强
+
+### 4.1 三层过滤
+
+```python
+def filter_news_item(
+    item: CrawlerNewsItem,
+    word_groups: List[Dict],
+    filter_words: List[str],
+    global_filters: List[str]
+) -> tuple[bool, List[str]]:
+    """
+    三层过滤：标题 -> 摘要 -> 完整内容
+
+    Returns:
+        (是否通过, 匹配的关键词列表)
+    """
+    matched_keywords = []
+
+    # 检查全局过滤词（任一内容匹配则排除）
+    all_content = f"{item.title} {item.summary} {item.full_content}"
+    for filter_word in global_filters:
+        if filter_word.lower() in all_content.lower():
+            return False, []
+
+    # 三层关键词匹配
+    texts_to_check = [
+        item.title,
+        item.summary,
+        item.full_content
+    ]
+
+    for text in texts_to_check:
+        if not text:
+            continue
+        for group in word_groups:
+            if matches_word_group(text, group, filter_words):
+                keyword = group.get("display_name") or group.get("words", [""])[0]
+                if keyword not in matched_keywords:
+                    matched_keywords.append(keyword)
+
+    return len(matched_keywords) > 0, matched_keywords
+```
+
+## 5. 网页展示改造
+
+### 5.1 显示需求
+
+1. **最大历史100条**: 滚动缓冲区
+2. **增量标记**: 每10秒显示新增条目
+3. **过滤状态**: 显示是否被过滤及原因
+4. **完整内容**: 可展开查看
+
+### 5.2 HTML 模板变更
+
+```html
+<!-- 新增条目标记 -->
+<div class="news-item {{ 'new-item' if is_new else '' }} {{ 'filtered-out' if filtered else '' }}">
+    <span class="time">{{ published_at }}</span>
+    <span class="title">{{ title }}</span>
+    {% if filtered %}
+    <span class="filter-tag" title="被过滤">🚫</span>
+    {% else %}
+    <span class="matched-tag" title="{{ matched_keywords|join(', ') }}">✓</span>
+    {% endif %}
+    <button class="expand-btn" onclick="toggleContent(this)">展开</button>
+    <div class="full-content hidden">{{ full_content }}</div>
+</div>
+```
+
+## 6. AI 分析接口预留
+
+```python
+@dataclass
+class AIAnalysisRequest:
+    """AI分析请求"""
+    item_id: int
+    title: str
+    summary: str
+    full_content: str
+    prompt_template: str = ""
+
+@dataclass
+class AIAnalysisResult:
+    """AI分析结果"""
+    item_id: int
+    analysis: str = ""
+    keywords_extracted: List[str] = None
+    sentiment: str = ""  # positive/negative/neutral
+    importance: int = 0  # 1-10
+    error: str = ""
+
+class AIAnalyzer:
+    """AI分析器（预留接口）"""
+
+    async def analyze(self, request: AIAnalysisRequest) -> AIAnalysisResult:
+        """异步分析单条新闻"""
+        # TODO: 实现AI分析逻辑
+        pass
+
+    async def batch_analyze(self, requests: List[AIAnalysisRequest]) -> List[AIAnalysisResult]:
+        """批量分析"""
+        pass
+```
+
+## 7. 实现计划
+
+### Phase 1: 核心爬虫模块 ✅
+- [x] 创建设计文档
+- [x] 实现 BaseCrawler 抽象类
+- [x] 实现 THSCrawler (同花顺)
+- [x] 实现 CrawlerManager
+
+### Phase 2: 存储与异常处理 ✅
+- [x] 实现数据库 schema
+- [x] 实现错误日志机制
+- [x] 实现数据清理机制
+
+### Phase 3: 集成与过滤 ✅
+- [x] 集成到 TrendRadar 主流程
+- [x] 实现三层过滤
+- [x] 修复增量机制 bug
+
+### Phase 4: 展示与测试 ✅
+- [x] 改造网页显示（HTML报告）
+- [x] 编写测试脚本
+- [x] 端到端测试
+
+### Phase 5: 文档与发布 ✅
+- [x] 更新部署文档
+- [x] 更新架构图
+- [x] 代码提交
+
+## 8. 实现文件清单
+
+### 8.1 核心模块
+
+| 文件路径 | 说明 |
+|---------|------|
+| `trendradar/crawler/custom/__init__.py` | 模块入口，导出所有公共类和函数 |
+| `trendradar/crawler/custom/base.py` | 基础类：BaseCrawler, CrawlerNewsItem, CrawlResult, FetchStatus |
+| `trendradar/crawler/custom/ths.py` | 同花顺7x24爬虫实现 |
+| `trendradar/crawler/custom/manager.py` | 爬虫管理器，支持注册、调度、存储 |
+| `trendradar/crawler/custom/filter.py` | 三层过滤模块 |
+| `trendradar/crawler/runner.py` | 爬虫运行器，集成到主流程 |
+
+### 8.2 脚本文件
+
+| 文件路径 | 说明 |
+|---------|------|
+| `scripts/run_crawler.py` | 独立爬虫运行脚本，支持 HTML 报告生成 |
+| `scripts/test_crawler.py` | 爬虫模块测试脚本 |
+
+### 8.3 配置文件
+
+| 文件路径 | 变更 |
+|---------|------|
+| `config/config.yaml` | 新增 `crawler_custom` 配置段 |
+| `trendradar/core/loader.py` | 新增 `_load_crawler_custom_config` 函数 |
+
+### 8.4 使用方式
+
+```bash
+# 测试爬虫模块
+python3 scripts/test_crawler.py
+
+# 运行爬虫（持续模式）
+python3 scripts/run_crawler.py
+
+# 运行爬虫（单次模式）
+python3 scripts/run_crawler.py --once
+
+# 指定运行时长（秒）
+python3 scripts/run_crawler.py -d 300
+
+# 自定义轮询间隔
+python3 scripts/run_crawler.py -i 5
+```
+
+## 9. 风险与缓解
+
+| 风险 | 影响 | 缓解措施 |
+|------|------|---------|
+| 网站反爬 | 无法获取数据 | 合理请求间隔、UA伪装 |
+| 页面结构变化 | 解析失败 | 多种选择器备选、错误告警 |
+| 网络波动 | 数据不完整 | 重试机制、本地缓存 |
+| AI响应慢 | 推送延迟 | 异步处理、超时跳过 |
+
+## 10. 后续扩展
+
+1. **更多数据源**: 财联社、新浪财经等
+2. **MCP集成**: 支持AI助手查询
+3. **告警通知**: 异常情况微信/邮件告警
+4. **数据分析**: 历史趋势、热点追踪
