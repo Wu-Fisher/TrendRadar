@@ -135,8 +135,8 @@ class CrawlerDaemon:
             print("[Daemon] AI 分析线程已启动（预留）")
 
     def _send_notification(self, new_items: list):
-        """发送即时通知"""
-        if not self._notifier or not new_items:
+        """发送即时通知（支持多渠道）"""
+        if not new_items:
             return
 
         try:
@@ -148,28 +148,95 @@ class CrawlerDaemon:
                     print(f"[Daemon] {len(new_items)} 条新增均被过滤，跳过推送")
                 return
 
-            # 构建简化的推送内容
-            content = self._build_push_content(items_to_push)
+            # 构建推送内容
+            html_content = self._build_push_content(items_to_push)
+            text_content = self._build_text_content(items_to_push)
+            subject = f"[同花顺快讯] {len(items_to_push)} 条新消息"
 
-            # 使用通知器发送
-            # 这里简化处理，直接调用邮件发送
-            if hasattr(self._notifier, 'ctx') and self._notifier.ctx:
-                from trendradar.notification.senders import send_email
+            pushed = False
 
-                email_config = self.config.get("NOTIFICATION", {}).get("EMAIL", {})
-                if email_config.get("ENABLED"):
-                    subject = f"[同花顺快讯] {len(items_to_push)} 条新消息"
-                    send_email(
-                        subject=subject,
-                        body=content,
-                        config=self.config,
-                        is_html=True,
-                    )
-                    self.stats["total_pushed"] += len(items_to_push)
-                    print(f"[Daemon] 推送 {len(items_to_push)} 条新消息")
+            # 邮件推送（使用简化的直接发送）
+            if self.config.get("EMAIL_FROM") and self.config.get("EMAIL_TO"):
+                try:
+                    self._send_email_direct(subject, html_content)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] 邮件推送成功")
+                except Exception as e:
+                    print(f"[Daemon] 邮件推送失败: {e}")
+
+            # 飞书推送
+            if self.config.get("FEISHU_WEBHOOK_URL"):
+                try:
+                    from trendradar.notification.senders import send_to_feishu
+                    send_to_feishu(subject, text_content, self.config)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] 飞书推送成功")
+                except Exception as e:
+                    print(f"[Daemon] 飞书推送失败: {e}")
+
+            # 钉钉推送
+            if self.config.get("DINGTALK_WEBHOOK_URL"):
+                try:
+                    from trendradar.notification.senders import send_to_dingtalk
+                    send_to_dingtalk(subject, text_content, self.config)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] 钉钉推送成功")
+                except Exception as e:
+                    print(f"[Daemon] 钉钉推送失败: {e}")
+
+            # 企业微信推送
+            if self.config.get("WEWORK_WEBHOOK_URL"):
+                try:
+                    from trendradar.notification.senders import send_to_wework
+                    send_to_wework(subject, text_content, self.config)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] 企业微信推送成功")
+                except Exception as e:
+                    print(f"[Daemon] 企业微信推送失败: {e}")
+
+            # Telegram 推送
+            if self.config.get("TELEGRAM_BOT_TOKEN") and self.config.get("TELEGRAM_CHAT_ID"):
+                try:
+                    from trendradar.notification.senders import send_to_telegram
+                    send_to_telegram(subject, text_content, self.config)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] Telegram 推送成功")
+                except Exception as e:
+                    print(f"[Daemon] Telegram 推送失败: {e}")
+
+            if pushed:
+                self.stats["total_pushed"] += len(items_to_push)
+                print(f"[Daemon] 推送 {len(items_to_push)} 条新消息")
+            elif self.verbose:
+                print(f"[Daemon] 未配置任何推送渠道")
 
         except Exception as e:
             print(f"[Daemon] 推送失败: {e}")
+
+    def _build_text_content(self, items: list) -> str:
+        """构建纯文本推送内容（用于飞书/钉钉等）"""
+        lines = [
+            f"📰 同花顺快讯 - {len(items)} 条新消息",
+            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "━" * 30,
+        ]
+
+        for i, item in enumerate(items, 1):
+            keywords = ", ".join(item.matched_keywords) if item.matched_keywords else ""
+            keyword_tag = f" 【{keywords}】" if keywords else ""
+            lines.append(f"\n{i}. {item.title}{keyword_tag}")
+            lines.append(f"   {item.published_at}")
+            if item.summary:
+                summary = item.summary[:100] + "..." if len(item.summary) > 100 else item.summary
+                lines.append(f"   {summary}")
+            lines.append(f"   🔗 {item.url}")
+
+        return "\n".join(lines)
 
     def _build_push_content(self, items: list) -> str:
         """构建推送内容"""
@@ -195,6 +262,60 @@ class CrawlerDaemon:
 
         lines.append("</body></html>")
         return "\n".join(lines)
+
+    def _send_email_direct(self, subject: str, html_content: str):
+        """直接发送邮件（不依赖文件）"""
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        from_email = self.config.get("EMAIL_FROM", "")
+        password = self.config.get("EMAIL_PASSWORD", "")
+        to_email = self.config.get("EMAIL_TO", "")
+        smtp_server = self.config.get("EMAIL_SMTP_SERVER", "")
+        smtp_port = self.config.get("EMAIL_SMTP_PORT", "")
+
+        if not all([from_email, password, to_email]):
+            raise ValueError("邮件配置不完整")
+
+        # 自动识别 SMTP 服务器
+        if not smtp_server:
+            domain = from_email.split("@")[-1].lower()
+            smtp_servers = {
+                "qq.com": ("smtp.qq.com", 465),
+                "163.com": ("smtp.163.com", 465),
+                "126.com": ("smtp.126.com", 465),
+                "gmail.com": ("smtp.gmail.com", 587),
+                "outlook.com": ("smtp.office365.com", 587),
+                "hotmail.com": ("smtp.office365.com", 587),
+            }
+            if domain in smtp_servers:
+                smtp_server, smtp_port = smtp_servers[domain]
+            else:
+                smtp_server = f"smtp.{domain}"
+                smtp_port = 465
+
+        smtp_port = int(smtp_port) if smtp_port else 465
+
+        # 构建邮件
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_email
+        msg["To"] = to_email
+
+        html_part = MIMEText(html_content, "html", "utf-8")
+        msg.attach(html_part)
+
+        # 发送
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30) as server:
+                server.login(from_email, password)
+                server.sendmail(from_email, to_email.split(","), msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+                server.starttls()
+                server.login(from_email, password)
+                server.sendmail(from_email, to_email.split(","), msg.as_string())
 
     def run_once(self) -> dict:
         """执行一次爬取"""
