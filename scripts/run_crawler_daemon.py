@@ -87,11 +87,23 @@ class CrawlerDaemon:
 
         try:
             from trendradar.notification.dispatcher import NotificationDispatcher
+            from trendradar.notification.splitter import split_content_into_batches
             from trendradar.context import AppContext
+            import pytz
 
-            # 创建简化的上下文
-            ctx = AppContext(self.config)
-            self._notifier = NotificationDispatcher(ctx)
+            # 创建时间函数
+            timezone = self.config.get("TIMEZONE", "Asia/Shanghai")
+            tz = pytz.timezone(timezone)
+
+            def get_time_func():
+                return datetime.now(tz)
+
+            # 初始化通知器
+            self._notifier = NotificationDispatcher(
+                config=self.config,
+                get_time_func=get_time_func,
+                split_content_func=split_content_into_batches,
+            )
             print("[Daemon] 通知器初始化成功")
         except Exception as e:
             print(f"[Daemon] 通知器初始化失败: {e}")

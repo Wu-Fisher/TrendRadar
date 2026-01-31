@@ -11,6 +11,8 @@ services:
       - ../config:/app/config:ro
       - ../output:/app/output
       - ../trendradar:/app/trendradar:ro
+      - ../scripts:/app/scripts:ro
+      - ./entrypoint.sh:/entrypoint.sh:ro
 
     environment:
       - TZ=Asia/Shanghai
@@ -56,6 +58,10 @@ services:
       - CRON_SCHEDULE=${CRON_SCHEDULE:-*/30 * * * *}
       - RUN_MODE=${RUN_MODE:-cron}
       - IMMEDIATE_RUN=${IMMEDIATE_RUN:-true}
+      # 守护进程配置
+      - CRAWLER_POLL_INTERVAL=${CRAWLER_POLL_INTERVAL:-10}
+      - CRAWLER_NO_PUSH=${CRAWLER_NO_PUSH:-false}
+      - CRAWLER_VERBOSE=${CRAWLER_VERBOSE:-false}
 
   trendradar-mcp:
     image: wantcat/trendradar-mcp:latest
