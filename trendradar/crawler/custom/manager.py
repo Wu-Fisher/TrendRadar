@@ -89,7 +89,7 @@ class CrawlerManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        # 原始数据表
+        # 新闻数据表（包含过滤状态）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS crawler_raw (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,32 +108,54 @@ class CrawlerManager:
                 content_fetched INTEGER DEFAULT 0,
                 content_fetch_error TEXT,
                 content_fetch_time TEXT,
+                -- 过滤状态字段
+                filtered_out INTEGER DEFAULT 0,
+                matched_keywords TEXT,
+                filter_tag TEXT,
+                filter_time TEXT,
+                -- 推送状态
+                pushed INTEGER DEFAULT 0,
+                push_time TEXT,
+                -- AI 分析预留
+                ai_analysis TEXT,
+                ai_analysis_time TEXT,
                 UNIQUE(source_id, seq)
             )
         """)
 
-        # 过滤后数据表
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS crawler_filtered (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                raw_id INTEGER NOT NULL,
-                source_id TEXT NOT NULL,
-                source_name TEXT NOT NULL,
-                seq TEXT NOT NULL,
-                title TEXT NOT NULL,
-                summary TEXT,
-                full_content TEXT,
-                url TEXT,
-                published_at TEXT,
-                matched_keywords TEXT,
-                filter_time TEXT NOT NULL,
-                pushed INTEGER DEFAULT 0,
-                push_time TEXT,
-                ai_analysis TEXT,
-                ai_analysis_time TEXT,
-                FOREIGN KEY (raw_id) REFERENCES crawler_raw(id)
-            )
-        """)
+        # 迁移：为旧表添加新字段（如果不存在）
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN filtered_out INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # 字段已存在
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN matched_keywords TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN filter_tag TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN filter_time TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN pushed INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN push_time TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN ai_analysis TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE crawler_raw ADD COLUMN ai_analysis_time TEXT")
+        except sqlite3.OperationalError:
+            pass
 
         # 错误日志表
         cursor.execute("""
@@ -155,8 +177,8 @@ class CrawlerManager:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_raw_source ON crawler_raw(source_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_raw_time ON crawler_raw(crawl_time)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_raw_first_seen ON crawler_raw(first_seen)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_filtered_source ON crawler_filtered(source_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_filtered_pushed ON crawler_filtered(pushed)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_raw_filtered ON crawler_raw(filtered_out)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_raw_pushed ON crawler_raw(pushed)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_errors_time ON crawler_errors(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_crawler_errors_resolved ON crawler_errors(resolved)")
 
@@ -320,13 +342,28 @@ class CrawlerManager:
             now = datetime.now().isoformat()
 
             for item in items:
+                # 准备过滤相关字段
+                matched_keywords_json = json.dumps(
+                    item.matched_keywords if item.matched_keywords else [],
+                    ensure_ascii=False
+                )
+                # filter_tag: 通过时显示匹配的关键词，过滤时显示原因
+                if item.matched_keywords:
+                    filter_tag = "✓ " + ", ".join(item.matched_keywords)
+                elif item.filter_reason:
+                    filter_tag = "🚫 " + item.filter_reason
+                else:
+                    filter_tag = ""
+                filter_time = now if (item.filtered_out or item.matched_keywords) else ""
+
                 # 使用 UPSERT
                 cursor.execute("""
                     INSERT INTO crawler_raw (
                         source_id, source_name, seq, title, summary, full_content,
                         url, published_at, extra_data, crawl_time, first_seen,
-                        last_seen, content_fetched, content_fetch_error, content_fetch_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        last_seen, content_fetched, content_fetch_error, content_fetch_time,
+                        filtered_out, matched_keywords, filter_tag, filter_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(source_id, seq) DO UPDATE SET
                         title = excluded.title,
                         summary = excluded.summary,
@@ -346,6 +383,19 @@ class CrawlerManager:
                         content_fetch_time = CASE
                             WHEN excluded.content_fetch_time != '' THEN excluded.content_fetch_time
                             ELSE crawler_raw.content_fetch_time
+                        END,
+                        filtered_out = excluded.filtered_out,
+                        matched_keywords = CASE
+                            WHEN excluded.matched_keywords != '[]' THEN excluded.matched_keywords
+                            ELSE crawler_raw.matched_keywords
+                        END,
+                        filter_tag = CASE
+                            WHEN excluded.filter_tag != '' THEN excluded.filter_tag
+                            ELSE crawler_raw.filter_tag
+                        END,
+                        filter_time = CASE
+                            WHEN excluded.filter_time != '' THEN excluded.filter_time
+                            ELSE crawler_raw.filter_time
                         END
                 """, (
                     source_id,
@@ -363,6 +413,10 @@ class CrawlerManager:
                     1 if item.content_fetched else 0,
                     item.content_fetch_error,
                     item.content_fetch_time,
+                    1 if item.filtered_out else 0,
+                    matched_keywords_json,
+                    filter_tag,
+                    filter_time,
                 ))
 
             conn.commit()

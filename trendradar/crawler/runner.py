@@ -163,6 +163,9 @@ class CrawlerRunner:
                     item.filtered_out = False
                     item.matched_keywords = []
 
+            # 过滤后重新保存到数据库（更新过滤状态）
+            self.manager._save_items(source_id, result.source_name, result.items)
+
             # 保存条目到内存（含过滤标记）
             self._last_items[source_id] = result.items
 
