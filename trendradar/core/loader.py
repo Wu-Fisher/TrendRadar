@@ -330,6 +330,7 @@ def _load_crawler_custom_config(config_data: Dict) -> Dict:
     return {
         "ENABLED": crawler_custom.get("enabled", False),
         "POLL_INTERVAL": crawler_custom.get("poll_interval", 10),
+        "API_TYPE": crawler_custom.get("api_type", "tapp"),  # tapp 或 jsonp
         "FULL_CONTENT": {
             "ENABLED": full_content.get("enabled", True),
             "ASYNC_MODE": full_content.get("async_mode", True),

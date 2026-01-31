@@ -21,6 +21,7 @@ from .base import (
 )
 from .manager import CrawlerManager
 from .ths import THSCrawler
+from .ths_tapp import THSTappCrawler
 from .filter import (
     filter_news_item,
     filter_news_items,
@@ -42,6 +43,7 @@ __all__ = [
     "CrawlerManager",
     # 爬虫实现
     "THSCrawler",
+    "THSTappCrawler",
     # 过滤
     "filter_news_item",
     "filter_news_items",

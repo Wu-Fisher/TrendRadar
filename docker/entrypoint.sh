@@ -15,6 +15,21 @@ case "${RUN_MODE:-cron}" in
     echo "🔄 单次执行"
     exec /usr/local/bin/python -m trendradar
     ;;
+"daemon")
+    echo "🚀 爬虫守护进程模式"
+    DAEMON_ARGS=""
+    if [ -n "${CRAWLER_POLL_INTERVAL}" ]; then
+        DAEMON_ARGS="$DAEMON_ARGS -i ${CRAWLER_POLL_INTERVAL}"
+    fi
+    if [ "${CRAWLER_NO_PUSH:-false}" = "true" ]; then
+        DAEMON_ARGS="$DAEMON_ARGS --no-push"
+    fi
+    if [ "${CRAWLER_VERBOSE:-false}" = "true" ]; then
+        DAEMON_ARGS="$DAEMON_ARGS --verbose"
+    fi
+    echo "⚙️ 参数: $DAEMON_ARGS"
+    exec /usr/local/bin/python scripts/run_crawler_daemon.py $DAEMON_ARGS
+    ;;
 "cron")
     # 生成 crontab
     echo "${CRON_SCHEDULE:-*/30 * * * *} cd /app && /usr/local/bin/python -m trendradar" > /tmp/crontab

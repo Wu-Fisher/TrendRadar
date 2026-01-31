@@ -7,6 +7,7 @@ TrendRadar AI 模块
 
 from .analyzer import AIAnalyzer, AIAnalysisResult
 from .translator import AITranslator, TranslationResult, BatchTranslationResult
+from .item_analyzer import NewsItemAnalyzer, ItemAnalysisResult, create_news_item_analyzer
 from .formatter import (
     get_ai_analysis_renderer,
     render_ai_analysis_markdown,
@@ -21,6 +22,10 @@ __all__ = [
     # 分析器
     "AIAnalyzer",
     "AIAnalysisResult",
+    # 新闻条目分析器（预留）
+    "NewsItemAnalyzer",
+    "ItemAnalysisResult",
+    "create_news_item_analyzer",
     # 翻译器
     "AITranslator",
     "TranslationResult",

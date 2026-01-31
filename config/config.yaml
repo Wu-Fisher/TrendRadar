@@ -480,6 +480,7 @@ advanced:
 crawler_custom:
   enabled: true                       # 是否启用自定义爬虫
   poll_interval: 10                   # 轮询间隔（秒），默认 10 秒
+  api_type: "tapp"                    # API 类型: tapp (JSON, 推荐) 或 jsonp (旧版)
 
   # 完整内容获取配置
   full_content:
@@ -490,11 +491,13 @@ crawler_custom:
 
   # 数据源配置
   # type 可选值: ths (同花顺)
+  # api_type: tapp (推荐，原生 JSON) 或 jsonp (旧版 JSONP)
   sources:
     - id: "ths-realtime"
       name: "同花顺7x24"
       type: "ths"
       enabled: true
+      # api_type: "tapp"              # 可在 source 级别覆盖
 
   # 数据存储配置
   storage:

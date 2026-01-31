@@ -21,6 +21,7 @@ import json
 from .custom import (
     CrawlerManager,
     THSCrawler,
+    THSTappCrawler,
     CrawlerNewsItem,
     CrawlResult,
     FetchStatus,
@@ -101,6 +102,10 @@ class CrawlerRunner:
 
     def _register_crawlers(self, sources: List[Dict]) -> None:
         """注册配置的爬虫"""
+        # 获取全局 API 类型配置
+        crawler_config = self.config.get("CRAWLER_CUSTOM", {})
+        default_api_type = crawler_config.get("API_TYPE", "tapp")  # 默认使用 TAPP API
+
         if not sources:
             # 默认注册同花顺爬虫
             sources = [{"id": "ths-realtime", "name": "同花顺7x24", "type": "ths", "enabled": True}]
@@ -110,13 +115,19 @@ class CrawlerRunner:
                 continue
 
             source_type = source.get("type", "ths")
-            if source_type == "ths":
-                crawler = THSCrawler(config={
+            # 支持在 source 级别覆盖 api_type
+            api_type = source.get("api_type", default_api_type)
+
+            if source_type in ("ths", "ths_tapp"):
+                crawler_cls = THSTappCrawler if api_type == "tapp" else THSCrawler
+                crawler = crawler_cls(config={
                     "timezone": self.config.get("TIMEZONE", "Asia/Shanghai"),
                     "timeout": source.get("timeout", 10),
                     "content_fetch_delay": self.content_fetch_delay,
+                    "page_size": source.get("page_size", 100),
                 })
                 self.manager.register(crawler)
+                print(f"[爬虫] 注册 {source.get('name', source_type)} (API: {api_type})")
 
     def crawl_once(self) -> Dict[str, CrawlResult]:
         """执行一次爬取

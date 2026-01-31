@@ -1,8 +1,8 @@
 # TrendRadar 自定义爬虫集成 - 开发进度
 
-> Version: 1.2.0
+> Version: 1.3.0
 > Date: 2026-01-31
-> Status: **Phase 1 Complete**
+> Status: **Phase 1.5 Complete** (延迟优化)
 
 ## 1. 需求清单
 
@@ -19,12 +19,53 @@
 | 9 | 邮箱推送 | P0 | **已完成** | 复用现有通知模块 |
 | 10 | 飞书/机器人推送 | P1 | **待测试** | 框架已支持，需配置测试 |
 | 11 | 过滤前/后数据库分离 | P1 | **已完成** | `crawler.db` 独立存储 |
-| 12 | AI 分析接口预留 | P2 | **已预留** | `ai_analysis` 字段 |
-| 13 | MCP 集成 | P2 | 待实现 | 支持 AI 助手查询 |
+| 12 | AI 分析接口预留 | P2 | **已完成** | `NewsItemAnalyzer` 接口 |
+| 13 | **TAPP JSON API** | P0 | **已完成** | 替代 JSONP，更稳定 |
+| 14 | **守护进程模式** | P0 | **已完成** | 10秒轮询，即时推送 |
+| 15 | MCP 集成 | P2 | 待实现 | 支持 AI 助手查询 |
 
 ---
 
-## 2. 已完成功能
+## 2. Phase 1.5: 延迟优化 (2026-01-31)
+
+### 2.1 优化效果
+
+| 指标 | 优化前 | 优化后 | 改善 |
+|------|--------|--------|------|
+| **轮询间隔** | 60s (Cron) | 10s (Daemon) | **-50s** |
+| **API 格式** | JSONP+GBK | JSON+UTF-8 | 更稳定 |
+| **推送延迟** | 等全流程 | 即时推送 | **即时** |
+| **预期中位数** | 2 分钟 | **1.2 分钟** | **-40%** |
+
+### 2.2 新增文件
+
+```
+trendradar/
+├── crawler/custom/
+│   └── ths_tapp.py          # TAPP JSON API 爬虫
+├── ai/
+│   └── item_analyzer.py     # 新闻条目 AI 分析器（预留）
+scripts/
+└── run_crawler_daemon.py    # 爬虫守护进程脚本
+```
+
+### 2.3 配置更新
+
+```yaml
+# config/config.yaml
+crawler_custom:
+  api_type: "tapp"    # 新增: tapp (推荐) 或 jsonp (旧版)
+```
+
+```bash
+# docker/.env
+RUN_MODE=daemon              # 新增: daemon 模式
+CRAWLER_POLL_INTERVAL=10     # 轮询间隔
+```
+
+---
+
+## 3. 已完成功能
 
 ### 2.1 核心爬虫模块
 
