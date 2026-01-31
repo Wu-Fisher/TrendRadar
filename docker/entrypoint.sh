@@ -27,6 +27,12 @@ case "${RUN_MODE:-cron}" in
     if [ "${CRAWLER_VERBOSE:-false}" = "true" ]; then
         DAEMON_ARGS="$DAEMON_ARGS --verbose"
     fi
+    if [ "${CRAWLER_ENABLE_AI:-false}" = "true" ]; then
+        DAEMON_ARGS="$DAEMON_ARGS --enable-ai"
+    fi
+    if [ "${CRAWLER_USE_CREWAI:-false}" = "true" ]; then
+        DAEMON_ARGS="$DAEMON_ARGS --use-crewai"
+    fi
     echo "⚙️ 参数: $DAEMON_ARGS"
     exec /usr/local/bin/python scripts/run_crawler_daemon.py $DAEMON_ARGS
     ;;

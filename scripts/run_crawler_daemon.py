@@ -5,8 +5,9 @@
 
 独立运行的自定义爬虫守护进程，支持：
 - 10秒轮询（可配置）
-- 即时推送通知
-- AI 分析队列（预留）
+- 即时推送通知（Phase 1）
+- AI 分析队列 + 增强推送（Phase 2）
+- 支持 SimpleAnalyzer 或 CrewAI 分析器
 - 独立于主流程运行
 
 用法:
@@ -16,6 +17,8 @@
     -i, --interval  轮询间隔（秒），默认 10
     -d, --duration  运行时长（秒），0 表示无限运行，默认 0
     --no-push       禁用推送通知
+    --enable-ai     启用 AI 分析（Phase 2 增强推送）
+    --use-crewai    使用 CrewAI 分析器（默认使用 SimpleAnalyzer）
     --once          只运行一次
     --verbose       详细输出
 """
@@ -47,11 +50,15 @@ class CrawlerDaemon:
         config: dict,
         poll_interval: int = 10,
         enable_push: bool = True,
+        enable_ai: bool = False,
+        use_crewai: bool = False,
         verbose: bool = False,
     ):
         self.config = config
         self.poll_interval = poll_interval
         self.enable_push = enable_push
+        self.enable_ai = enable_ai
+        self.use_crewai = use_crewai
         self.verbose = verbose
 
         # 创建运行器
@@ -61,8 +68,9 @@ class CrawlerDaemon:
         self._running = False
         self._stop_event = threading.Event()
 
-        # AI 分析队列（预留）
-        self.ai_queue: queue.Queue = queue.Queue(maxsize=100)
+        # AI 分析组件
+        self._ai_analyzer = None
+        self._ai_queue = None
         self._ai_thread = None
 
         # 统计
@@ -73,6 +81,8 @@ class CrawlerDaemon:
             "failed_polls": 0,
             "total_new_items": 0,
             "total_pushed": 0,
+            "total_ai_analyzed": 0,
+            "total_ai_pushed": 0,
             "last_poll_time": None,
             "last_new_time": None,
         }
@@ -108,6 +118,156 @@ class CrawlerDaemon:
         except Exception as e:
             print(f"[Daemon] 通知器初始化失败: {e}")
             self._notifier = None
+
+    def _init_ai(self):
+        """初始化 AI 分析组件"""
+        if not self.enable_ai:
+            return
+
+        try:
+            from trendradar.ai.queue.manager import AIQueueManager
+
+            # 根据配置选择分析器
+            if self.use_crewai:
+                try:
+                    from trendradar.ai.analyzers import CREWAI_AVAILABLE, create_crew_analyzer
+                    if not CREWAI_AVAILABLE:
+                        raise ImportError("CrewAI 未安装")
+                    self._ai_analyzer = create_crew_analyzer(self.config, multi_agent=False)
+                    print(f"[Daemon] CrewAI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+                except ImportError as e:
+                    print(f"[Daemon] CrewAI 不可用，回退到 SimpleAnalyzer: {e}")
+                    from trendradar.ai.analyzers.simple import SimpleAnalyzer
+                    self._ai_analyzer = SimpleAnalyzer(self.config)
+                    print(f"[Daemon] AI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+            else:
+                from trendradar.ai.analyzers.simple import SimpleAnalyzer
+                self._ai_analyzer = SimpleAnalyzer(self.config)
+                print(f"[Daemon] AI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+
+            # 创建队列管理器
+            ai_config = self.config.get("AI", {})
+            queue_config = ai_config.get("QUEUE", ai_config.get("queue", {}))
+            self._ai_queue = AIQueueManager(
+                max_size=queue_config.get("MAX_SIZE", queue_config.get("max_size", 100)),
+                max_workers=queue_config.get("WORKERS", queue_config.get("workers", 2)),
+                max_retries=queue_config.get("RETRY_COUNT", queue_config.get("retry_count", 3)),
+            )
+
+            # 设置处理函数
+            self._ai_queue.set_processor(self._process_ai_item)
+            self._ai_queue.set_result_callback(self._on_ai_result)
+
+            # 启动队列
+            self._ai_queue.start()
+            print(f"[Daemon] AI 队列已启动")
+
+        except Exception as e:
+            print(f"[Daemon] AI 初始化失败: {e}")
+            self._ai_analyzer = None
+            self._ai_queue = None
+            self.enable_ai = False
+
+    def _process_ai_item(self, item: CrawlerNewsItem):
+        """处理单条新闻的 AI 分析"""
+        if not self._ai_analyzer:
+            return None
+
+        content = item.full_content or item.summary or ""
+        if not content:
+            return None
+
+        result = self._ai_analyzer.analyze(
+            news_id=item.seq,
+            title=item.title,
+            content=content
+        )
+
+        return {
+            "item": item,
+            "result": result,
+        }
+
+    def _on_ai_result(self, task_id: str, data: dict, success: bool):
+        """AI 分析完成回调"""
+        if not success or not data:
+            return
+
+        self.stats["total_ai_analyzed"] += 1
+
+        item = data.get("item")
+        result = data.get("result")
+
+        if not result or not result.success:
+            return
+
+        if self.verbose:
+            print(f"[AI] 分析完成: {item.title[:30]}... -> {result.summary[:30]}...")
+
+        # Phase 2: 发送增强推送
+        if self.enable_push:
+            self._send_ai_enhanced_notification(item, result)
+
+    def _send_ai_enhanced_notification(self, item: CrawlerNewsItem, result):
+        """发送 AI 增强推送（Phase 2）"""
+        try:
+            # 构建增强内容
+            keywords_str = ", ".join(result.keywords) if result.keywords else "无"
+            sentiment_emoji = {"positive": "📈", "negative": "📉", "neutral": "➡️"}.get(result.sentiment, "➡️")
+
+            text_content = f"""🤖 AI 分析报告
+
+📰 {item.title}
+
+📝 摘要: {result.summary}
+
+🏷️ 关键词: {keywords_str}
+{sentiment_emoji} 情感: {result.sentiment}
+⭐ 重要性: {'⭐' * result.importance}
+
+🔗 {item.url}
+"""
+
+            # 发送到各渠道
+            pushed = False
+
+            # 飞书推送
+            if self.config.get("FEISHU_WEBHOOK_URL"):
+                try:
+                    from trendradar.notification.senders import send_to_feishu
+                    send_to_feishu("AI 分析报告", text_content, self.config)
+                    pushed = True
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[Daemon] 飞书 AI 推送失败: {e}")
+
+            # 钉钉推送
+            if self.config.get("DINGTALK_WEBHOOK_URL"):
+                try:
+                    from trendradar.notification.senders import send_to_dingtalk
+                    send_to_dingtalk("AI 分析报告", text_content, self.config)
+                    pushed = True
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[Daemon] 钉钉 AI 推送失败: {e}")
+
+            # Telegram 推送
+            if self.config.get("TELEGRAM_BOT_TOKEN") and self.config.get("TELEGRAM_CHAT_ID"):
+                try:
+                    from trendradar.notification.senders import send_to_telegram
+                    send_to_telegram("AI 分析报告", text_content, self.config)
+                    pushed = True
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[Daemon] Telegram AI 推送失败: {e}")
+
+            if pushed:
+                self.stats["total_ai_pushed"] += 1
+                if self.verbose:
+                    print(f"[Daemon] AI 增强推送成功")
+
+        except Exception as e:
+            print(f"[Daemon] AI 增强推送失败: {e}")
 
     def _start_ai_worker(self):
         """启动 AI 分析后台线程（预留）"""
@@ -319,6 +479,10 @@ class CrawlerDaemon:
 
     def run_once(self) -> dict:
         """执行一次爬取"""
+        # 延迟初始化 AI（支持 --once 模式）
+        if self.enable_ai and self._ai_analyzer is None:
+            self._init_ai()
+
         self.stats["total_polls"] += 1
         self.stats["last_poll_time"] = datetime.now().isoformat()
 
@@ -344,12 +508,15 @@ class CrawlerDaemon:
                 if self.enable_push:
                     self._send_notification(new_items)
 
-                # 加入 AI 分析队列（预留）
-                for item in new_items:
-                    try:
-                        self.ai_queue.put_nowait(item)
-                    except queue.Full:
-                        pass
+                # 加入 AI 分析队列
+                if self.enable_ai and self._ai_queue:
+                    for item in new_items:
+                        if not item.filtered_out:  # 只分析通过过滤的条目
+                            try:
+                                self._ai_queue.enqueue(item)
+                            except Exception as e:
+                                if self.verbose:
+                                    print(f"[Daemon] AI 入队失败: {e}")
 
             self.stats["successful_polls"] += 1
             return {"success": True, "new_count": len(new_items), "results": results}
@@ -371,10 +538,12 @@ class CrawlerDaemon:
         print(f"[Daemon] 启动爬虫守护进程")
         print(f"[Daemon] 轮询间隔: {self.poll_interval}s")
         print(f"[Daemon] 推送通知: {'启用' if self.enable_push else '禁用'}")
+        print(f"[Daemon] AI 分析: {'启用' if self.enable_ai else '禁用'}")
 
         # 初始化
         self._init_notifier()
-        self._start_ai_worker()
+        if self.enable_ai:
+            self._init_ai()
 
         # 注册信号处理
         def signal_handler(sig, frame):
@@ -411,6 +580,11 @@ class CrawlerDaemon:
         self._running = False
         self.runner.cleanup()
 
+        # 停止 AI 队列
+        if self._ai_queue:
+            print("[Daemon] 停止 AI 分析队列...")
+            self._ai_queue.stop(wait=True, timeout=10.0)
+
         # 输出统计
         self._print_stats()
 
@@ -430,6 +604,10 @@ class CrawlerDaemon:
         print(f"失败次数: {self.stats['failed_polls']}")
         print(f"发现新消息: {self.stats['total_new_items']} 条")
         print(f"推送消息: {self.stats['total_pushed']} 条")
+        if self.enable_ai:
+            print("-" * 50)
+            print(f"AI 分析完成: {self.stats['total_ai_analyzed']} 条")
+            print(f"AI 推送消息: {self.stats['total_ai_pushed']} 条")
         print("=" * 50)
 
 
@@ -438,6 +616,8 @@ def main():
     parser.add_argument("-i", "--interval", type=int, default=10, help="轮询间隔（秒）")
     parser.add_argument("-d", "--duration", type=int, default=0, help="运行时长（秒），0 表示无限")
     parser.add_argument("--no-push", action="store_true", help="禁用推送通知")
+    parser.add_argument("--enable-ai", action="store_true", help="启用 AI 分析")
+    parser.add_argument("--use-crewai", action="store_true", help="使用 CrewAI 分析器（默认使用 SimpleAnalyzer）")
     parser.add_argument("--once", action="store_true", help="只运行一次")
     parser.add_argument("--verbose", action="store_true", help="详细输出")
     args = parser.parse_args()
@@ -451,6 +631,8 @@ def main():
         config=config,
         poll_interval=args.interval,
         enable_push=not args.no_push,
+        enable_ai=args.enable_ai,
+        use_crewai=args.use_crewai,
         verbose=args.verbose,
     )
 

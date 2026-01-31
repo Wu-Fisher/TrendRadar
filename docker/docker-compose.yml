@@ -62,6 +62,8 @@ services:
       - CRAWLER_POLL_INTERVAL=${CRAWLER_POLL_INTERVAL:-10}
       - CRAWLER_NO_PUSH=${CRAWLER_NO_PUSH:-false}
       - CRAWLER_VERBOSE=${CRAWLER_VERBOSE:-false}
+      - CRAWLER_ENABLE_AI=${CRAWLER_ENABLE_AI:-false}
+      - CRAWLER_USE_CREWAI=${CRAWLER_USE_CREWAI:-false}
 
   trendradar-mcp:
     image: wantcat/trendradar-mcp:latest

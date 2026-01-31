@@ -77,8 +77,8 @@ docker/.vscode/
 docker/1ms-helper
 
 # ── 敏感配置（本地修改）──────────────────────────────────────
-# 如果 config.yaml 包含敏感信息，取消下面这行的注释
-# config/config.yaml
+# config.yaml 包含 API Key 等敏感信息，不要提交到仓库
+config/config.yaml
 
 # ── Claude Code ───────────────────────────────────────────────
 .claude/
