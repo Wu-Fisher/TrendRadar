@@ -71,7 +71,7 @@ def _load_crawler_config(config_data: Dict) -> Dict:
         "REQUEST_INTERVAL": crawler_config.get("request_interval", 100),
         "USE_PROXY": crawler_config.get("use_proxy", False),
         "DEFAULT_PROXY": crawler_config.get("default_proxy", ""),
-        "ENABLE_CRAWLER": platforms_config.get("enabled", True),
+        "ENABLE_PLATFORMS": platforms_config.get("enabled", True),
     }
 
 

@@ -481,7 +481,7 @@ class DataService:
 
         if section == "all" or section == "crawler":
             crawler_config = {
-                "enable_crawler": platforms_config.get("enabled", True),
+                "enable_platforms": platforms_config.get("enabled", True),
                 "use_proxy": advanced_crawler.get("use_proxy", False),
                 "request_interval": advanced_crawler.get("request_interval", 1),
                 "retry_times": 3,

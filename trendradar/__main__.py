@@ -986,9 +986,23 @@ class NewsAnalyzer:
         now = self.ctx.get_time()
         print(f"当前北京时间: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        if not self.ctx.config["ENABLE_CRAWLER"]:
-            print("爬虫功能已禁用（ENABLE_CRAWLER=False），程序退出")
-            return
+        # 显示各数据源状态
+        platforms_enabled = self.ctx.config.get("ENABLE_PLATFORMS", True)
+        rss_enabled = self.ctx.rss_enabled
+        custom_enabled = self.ctx.custom_crawler_enabled
+
+        sources_status = []
+        if platforms_enabled:
+            sources_status.append("热榜")
+        if rss_enabled:
+            sources_status.append("RSS")
+        if custom_enabled:
+            sources_status.append("自定义爬虫")
+
+        if sources_status:
+            print(f"已启用数据源: {', '.join(sources_status)}")
+        else:
+            print("警告: 未启用任何数据源")
 
         has_notification = self._has_notification_configured()
         if not self.ctx.config["ENABLE_NOTIFICATION"]:
@@ -1003,13 +1017,22 @@ class NewsAnalyzer:
         print(f"运行模式: {mode_strategy['description']}")
 
     def _crawl_data(self) -> Tuple[Dict, Dict, List]:
-        """执行数据爬取"""
+        """执行热榜数据爬取"""
+        # 检查是否启用热榜平台
+        if not self.ctx.config.get("ENABLE_PLATFORMS", True):
+            print("[热榜] 已禁用 (platforms.enabled: false)")
+            return {}, {}, []
+
         ids = []
         for platform in self.ctx.platforms:
             if "name" in platform:
                 ids.append((platform["id"], platform["name"]))
             else:
                 ids.append(platform["id"])
+
+        if not ids:
+            print("[热榜] 未配置任何平台")
+            return {}, {}, []
 
         print(
             f"配置的监控平台: {[p.get('name', p['id']) for p in self.ctx.platforms]}"

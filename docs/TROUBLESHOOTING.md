@@ -344,19 +344,23 @@ email:
 
 ## 9. 常见配置错误
 
-### 9.1 platforms.enabled: false 不生效
+### 9.1 platforms.enabled: false 配置说明
 
-**问题**: 即使设置 `enabled: false`，热榜仍会抓取
+**功能**: 设置 `enabled: false` 可禁用热榜平台抓取，同时保留 RSS 和自定义爬虫功能
 
-**原因**: 程序 bug，未完全实现该配置
-
-**临时解决**: 保留一个平台，避免报错
+**配置示例**:
 ```yaml
 platforms:
-  enabled: false
-  sources:
+  enabled: false                  # 禁用热榜
+  sources:                        # 保留配置避免格式错误
     - id: "cls-hot"
       name: "财联社热门"
+```
+
+**运行效果**:
+```
+已启用数据源: RSS, 自定义爬虫
+[热榜] 已禁用 (platforms.enabled: false)
 ```
 
 ### 9.2 CRON 执行间隔太短

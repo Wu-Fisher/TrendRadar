@@ -234,7 +234,6 @@ ai_analysis:
 
 1. **API 缓存限制**: THS API 服务端缓存 ~2分钟，无法突破
 2. **服务器 IP 限制**: 部分 API 可能限制服务器 IP 访问
-3. **`platforms.enabled: false` 不生效**: 原项目遗留问题，待修复
 
 ---
 
