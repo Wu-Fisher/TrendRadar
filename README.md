@@ -137,7 +137,7 @@ CRAWLER_VERBOSE=true      # 详细日志
 ```bash
 # AI API 配置
 AI_API_KEY=sk-your-api-key
-AI_MODEL=openai/deepseek-ai/DeepSeek-V3
+AI_MODEL=openai/Pro/deepseek-ai/DeepSeek-V3.2
 AI_API_BASE=https://api.siliconflow.cn/v1
 ```
 

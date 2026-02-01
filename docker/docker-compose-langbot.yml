@@ -1,0 +1,40 @@
+# LangBot 独立部署配置
+# 用于飞书交互机器人测试
+# 启动: docker compose -f docker-compose-langbot.yml up -d
+
+services:
+  # LangBot 主服务
+  langbot:
+    image: rockchin/langbot:latest
+    container_name: langbot
+    volumes:
+      - ./langbot_data:/app/data                    # LangBot 数据目录
+      - ../config:/app/trendradar_config:rw         # TrendRadar 配置 (读写)
+    ports:
+      - "5300:5300"      # WebUI + Webhook 回调
+      - "2280-2285:2280-2285"  # 平台反向连接 (WebSocket)
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - langbot_network
+
+  # LangBot 插件运行时 (独立进程)
+  langbot_plugin_runtime:
+    image: rockchin/langbot:latest
+    container_name: langbot_plugin_runtime
+    volumes:
+      - ./langbot_data/plugins:/app/data/plugins    # 插件目录
+      - ../config:/app/trendradar_config:rw         # TrendRadar 配置 (读写)
+    ports:
+      - "5401:5401"      # 插件运行时端口
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["uv", "run", "--no-sync", "-m", "langbot_plugin.cli.__init__", "rt"]
+    networks:
+      - langbot_network
+
+networks:
+  langbot_network:
+    driver: bridge
