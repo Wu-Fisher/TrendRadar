@@ -259,9 +259,47 @@ StockTrendRadar/
 
 ## 参考文档
 
-- [原版 TrendRadar 文档](README-TrendRadar-Archive.md) - 包含飞书/钉钉等推送配置详细教程
-- [开发路线图](docs/ROADMAP.md) - 详细的后续开发计划
-- [架构设计](docs/ARCHITECTURE.md) - 系统架构详细说明
+### 核心文档 (按需检索)
+
+| 文档 | 说明 | 适用场景 |
+|------|------|----------|
+| **[系统总览](docs/SYSTEM_OVERVIEW.md)** | 架构、流程、数据流向 | 🔰 首次了解系统 |
+| **[Docker 配置](docs/DOCKER_ENV.md)** | 环境变量详解 | 修改运行模式、AI配置 |
+| **[关键词过滤](docs/KEYWORD_FILTER.md)** | 过滤规则语法 | 添加/修改监控关键词 |
+| **[AI 提示词](docs/AI_PROMPT_GUIDE.md)** | AI 分析原理详解 | 理解/自定义 AI 分析风格 |
+| **[飞书配置](docs/LANGBOT_FEISHU_SETUP.md)** | LangBot + 飞书设置 | 配置飞书机器人 |
+| **[飞书推送](docs/LANGBOT_PUSH_GUIDE.md)** | 飞书 API 推送指南 | 启用飞书实时推送 |
+| **[故障排查](docs/TROUBLESHOOTING.md)** | 常见问题解决 | 遇到问题时查阅 |
+| **[架构设计](docs/ARCHITECTURE.md)** | 技术架构细节 | 深入了解代码结构 |
+
+### 配置文件快速索引
+
+| 文件 | 用途 | 常见操作 |
+|------|------|----------|
+| `docker/.env` | 运行配置 | 修改模式、API Key、推送渠道 |
+| `config/config.yaml` | 主配置 | 数据源、显示区域、推送时间窗口 |
+| `config/frequency_words.txt` | 关键词过滤 | 添加监控关键词 |
+| `config/ai_analysis_prompt.txt` | AI 提示词 | 自定义分析风格 |
+
+### 常用命令
+
+```bash
+# 查看服务状态
+docker ps -a | grep -E "trendradar|langbot|feishu"
+
+# 查看实时日志
+docker logs -f trendradar
+
+# 重启服务
+docker compose restart trendradar
+
+# 手动执行一次 (调试)
+docker exec trendradar python scripts/run_crawler_daemon.py --once --verbose
+```
+
+---
+
+- [原版 TrendRadar 文档](README-TrendRadar-Archive.md) - 历史参考
 
 ## 许可证
 

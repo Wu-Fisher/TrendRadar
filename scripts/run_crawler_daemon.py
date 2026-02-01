@@ -215,9 +215,13 @@ class CrawlerDaemon:
             keywords_str = ", ".join(result.keywords) if result.keywords else "无"
             sentiment_emoji = {"positive": "📈", "negative": "📉", "neutral": "➡️"}.get(result.sentiment, "➡️")
 
+            # 格式化发布时间
+            pub_time = item.published_at if item.published_at else "未知"
+
             text_content = f"""🤖 AI 分析报告
 
 📰 {item.title}
+🕐 发布时间: {pub_time}
 
 📝 摘要: {result.summary}
 
@@ -230,6 +234,30 @@ class CrawlerDaemon:
 
             # 发送到各渠道
             pushed = False
+
+            # 邮件推送
+            if self.config.get("EMAIL_FROM") and self.config.get("EMAIL_TO"):
+                try:
+                    html_content = f"""<html><body>
+<h2 style="color: #1890ff;">🤖 AI 分析报告</h2>
+<div style="margin: 15px 0; padding: 15px; border-left: 4px solid #1890ff; background: #f6f8fa;">
+    <h3 style="margin: 0 0 10px 0;">{item.title}</h3>
+    <p style="color: #666; font-size: 14px;"><strong>🕐 发布时间:</strong> {pub_time}</p>
+    <p><strong>📝 摘要:</strong> {result.summary}</p>
+    <p><strong>🏷️ 关键词:</strong> {keywords_str}</p>
+    <p><strong>{sentiment_emoji} 情感:</strong> {result.sentiment}</p>
+    <p><strong>⭐ 重要性:</strong> {'⭐' * result.importance}</p>
+    <p><a href="{item.url}" style="color: #1890ff;">🔗 查看原文</a></p>
+</div>
+</body></html>"""
+                    subject = f"AI分析：{item.title}"
+                    self._send_email_direct(subject, html_content)
+                    pushed = True
+                    if self.verbose:
+                        print(f"[Daemon] 邮件 AI 推送成功")
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[Daemon] 邮件 AI 推送失败: {e}")
 
             # 飞书推送
             if self.config.get("FEISHU_WEBHOOK_URL"):
@@ -261,6 +289,15 @@ class CrawlerDaemon:
                     if self.verbose:
                         print(f"[Daemon] Telegram AI 推送失败: {e}")
 
+            # 写入推送队列供 LangBot 读取
+            self._write_push_queue(
+                push_type="ai_analysis",
+                subject=f"AI分析：{item.title}",
+                text_content=text_content,
+                items=[item],
+                ai_result=result
+            )
+
             if pushed:
                 self.stats["total_ai_pushed"] += 1
                 if self.verbose:
@@ -268,6 +305,62 @@ class CrawlerDaemon:
 
         except Exception as e:
             print(f"[Daemon] AI 增强推送失败: {e}")
+
+    def _write_push_queue(self, push_type: str, subject: str, text_content: str,
+                          html_content: str = None, items: list = None, ai_result=None):
+        """写入推送队列供 LangBot 读取"""
+        import json
+        import uuid
+
+        try:
+            queue_dir = Path(self.config.get("CONFIG_DIR", "/app/config")) / ".push_queue"
+            queue_dir.mkdir(exist_ok=True)
+
+            push_data = {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now().isoformat(),
+                "type": push_type,  # "raw" | "ai_analysis"
+                "subject": subject,
+                "text_content": text_content,
+                "html_content": html_content,
+                "status": "pending"
+            }
+
+            if items:
+                push_data["items"] = [
+                    {
+                        "title": getattr(i, 'title', ''),
+                        "url": getattr(i, 'url', ''),
+                        "summary": getattr(i, 'summary', '')[:200] if getattr(i, 'summary', '') else '',
+                        "published_at": getattr(i, 'published_at', ''),
+                        "matched_keywords": getattr(i, 'matched_keywords', [])
+                    }
+                    for i in items
+                ]
+
+            if ai_result:
+                push_data["ai_result"] = {
+                    "summary": getattr(ai_result, 'summary', ''),
+                    "keywords": getattr(ai_result, 'keywords', []),
+                    "sentiment": getattr(ai_result, 'sentiment', ''),
+                    "importance": getattr(ai_result, 'importance', 0)
+                }
+
+            # 原子写入：先写临时文件，再重命名
+            filename = f"{push_data['timestamp'].replace(':', '-')}_{push_data['id'][:8]}.json"
+            tmp_path = queue_dir / f".tmp_{filename}"
+            final_path = queue_dir / filename
+
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(push_data, f, ensure_ascii=False, indent=2)
+            tmp_path.rename(final_path)
+
+            if self.verbose:
+                print(f"[Daemon] 推送队列写入: {filename}")
+
+        except Exception as e:
+            if self.verbose:
+                print(f"[Daemon] 推送队列写入失败: {e}")
 
     def _start_ai_worker(self):
         """启动 AI 分析后台线程（预留）"""
@@ -368,6 +461,15 @@ class CrawlerDaemon:
                         print(f"[Daemon] Telegram 推送成功")
                 except Exception as e:
                     print(f"[Daemon] Telegram 推送失败: {e}")
+
+            # 写入推送队列供 LangBot 读取
+            self._write_push_queue(
+                push_type="raw",
+                subject=subject,
+                text_content=text_content,
+                html_content=html_content,
+                items=items_to_push
+            )
 
             if pushed:
                 self.stats["total_pushed"] += len(items_to_push)

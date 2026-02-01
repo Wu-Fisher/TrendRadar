@@ -11,8 +11,9 @@ services:
       - "127.0.0.1:${WEBSERVER_PORT:-8080}:${WEBSERVER_PORT:-8080}"
 
     volumes:
-      - ../config:/app/config:ro
+      - ../config:/app/config
       - ../output:/app/output
+      - ../scripts:/app/scripts
 
     environment:
       - TZ=Asia/Shanghai
@@ -81,3 +82,31 @@ services:
 
     environment:
       - TZ=Asia/Shanghai
+
+  # 飞书推送服务 (监听推送队列 -> 发送到飞书)
+  feishu_push:
+    image: python:3.11-slim
+    container_name: feishu_push
+    restart: unless-stopped
+    profiles: ["feishu"]  # 可选启动: docker compose --profile feishu up -d
+
+    volumes:
+      - ../scripts:/app/scripts:ro
+      - ../config:/app/config:rw
+      - ./langbot_data:/app/langbot_data:ro  # LangBot 数据 (读取凭证)
+
+    working_dir: /app
+    command: >
+      bash -c "pip install requests -q &&
+      python -u scripts/feishu_push_service.py
+      --queue-dir /app/config/.push_queue
+      --langbot-db /app/langbot_data/langbot.db
+      --verbose"
+
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - FEISHU_CHAT_IDS=${FEISHU_CHAT_IDS:-}
+      - FEISHU_OPEN_IDS=${FEISHU_OPEN_IDS:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}

@@ -199,6 +199,9 @@ class THSTappCrawler(BaseCrawler):
             if color > 1:
                 extra["highlight"] = True
 
+            # 保存原始 ctime 用于排序
+            extra["_ctime"] = int(ctime) if ctime else 0
+
             news_item = CrawlerNewsItem(
                 seq=str(seq),
                 title=item.get("title", "").strip(),
@@ -209,6 +212,9 @@ class THSTappCrawler(BaseCrawler):
                 extra=extra,
             )
             items.append(news_item)
+
+        # 按时间降序排序（最新的在前面）
+        items.sort(key=lambda x: x.extra.get("_ctime", 0), reverse=True)
 
         return items
 
