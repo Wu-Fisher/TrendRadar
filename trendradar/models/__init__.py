@@ -27,6 +27,10 @@ from .base import (
     BaseResult,
     BaseAnalysisResult,
     BaseNewsItem,
+    # 字段规范化工具
+    FIELD_NAME_MAPPING,
+    normalize_news_item,
+    get_mobile_url,
 )
 
 # 分析结果
@@ -53,6 +57,10 @@ __all__ = [
     "BaseResult",
     "BaseAnalysisResult",
     "BaseNewsItem",
+    # 字段规范化
+    "FIELD_NAME_MAPPING",
+    "normalize_news_item",
+    "get_mobile_url",
     # 分析结果
     "NewsAnalysisResult",
     "BatchAnalysisResult",

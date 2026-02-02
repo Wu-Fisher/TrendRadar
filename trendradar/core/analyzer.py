@@ -11,6 +11,7 @@
 from typing import Dict, List, Tuple, Optional, Callable
 
 from trendradar.core.frequency import matches_word_groups, _word_matches
+from trendradar.models import get_mobile_url
 
 
 def calculate_news_weight(
@@ -247,7 +248,7 @@ def count_word_frequency(
 
             source_ranks = title_data.get("ranks", [])
             source_url = title_data.get("url", "")
-            source_mobile_url = title_data.get("mobileUrl", "")
+            source_mobile_url = get_mobile_url(title_data)
 
             # 找到匹配的词组（防御性转换确保类型安全）
             title_lower = str(title).lower() if not isinstance(title, str) else title.lower()
@@ -306,7 +307,7 @@ def count_word_frequency(
                     if "ranks" in info and info["ranks"]:
                         ranks = info["ranks"]
                     url = info.get("url", source_url)
-                    mobile_url = info.get("mobileUrl", source_mobile_url)
+                    mobile_url = get_mobile_url(info, source_mobile_url)
                     rank_timeline = info.get("rank_timeline", [])
                 elif (
                     title_info
@@ -320,7 +321,7 @@ def count_word_frequency(
                     if "ranks" in info and info["ranks"]:
                         ranks = info["ranks"]
                     url = info.get("url", source_url)
-                    mobile_url = info.get("mobileUrl", source_mobile_url)
+                    mobile_url = get_mobile_url(info, source_mobile_url)
                     rank_timeline = info.get("rank_timeline", [])
 
                 if not ranks:
@@ -351,7 +352,7 @@ def count_word_frequency(
                         "ranks": ranks,
                         "rank_threshold": rank_threshold,
                         "url": url,
-                        "mobileUrl": mobile_url,
+                        "mobile_url": mobile_url,
                         "is_new": is_new,
                         "rank_timeline": rank_timeline,
                     }

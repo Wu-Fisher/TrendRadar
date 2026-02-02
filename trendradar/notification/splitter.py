@@ -8,6 +8,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Callable
 
+from trendradar.models import get_mobile_url
 from trendradar.report.formatter import format_title_for_platform
 from trendradar.report.helpers import format_rank_display
 from trendradar.utils.time import format_iso_time_friendly, convert_time_for_display
@@ -1513,7 +1514,7 @@ def _format_standalone_platform_item(item: Dict, index: int, format_type: str, r
         格式化后的条目行字符串
     """
     title = item.get("title", "")
-    url = item.get("url", "") or item.get("mobileUrl", "")
+    url = item.get("url", "") or get_mobile_url(item)
     ranks = item.get("ranks", [])
     rank = item.get("rank", 0)
     first_time = item.get("first_time", "")

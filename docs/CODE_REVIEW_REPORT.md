@@ -902,7 +902,22 @@ README.md 包含以下内容：
 |------|------|------|----------|
 | 1 | 创建 `trendradar/models/` 模块 | ✅ 完成 | 单元测试通过，Docker 验证 |
 | 2 | 引入 logging 模块 | 🔄 部分完成 | 模块已创建，逐步迁移中 |
-| 3 | 字段命名统一（mobileUrl → mobile_url） | 待开始 | 全文搜索确认 |
+| 3 | 字段命名统一（mobileUrl → mobile_url） | ✅ 完成 | 核心模块已迁移 |
+
+**P1-3 字段命名统一 实施详情：**
+
+| 创建/修改文件 | 改动内容 |
+|--------------|----------|
+| `trendradar/models/base.py` | 新增 `normalize_news_item()`, `get_mobile_url()` 工具函数 |
+| `trendradar/core/data.py` | 输出改用 `mobile_url` 键名 |
+| `trendradar/core/analyzer.py` | 使用 `get_mobile_url()` 读取，输出用 `mobile_url` |
+| `trendradar/notification/splitter.py` | 使用 `get_mobile_url()` 兼容读取 |
+| `trendradar/report/html.py` | 使用 `get_mobile_url()` 兼容读取 |
+
+**兼容性策略：**
+- `get_mobile_url()` 函数同时接受 `mobile_url` 和 `mobileUrl` 键名
+- 输出统一使用 `mobile_url` (snake_case)
+- mcp_server 等外围模块待后续迭代迁移
 
 **P1-2 日志模块 实施详情：**
 

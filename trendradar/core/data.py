@@ -131,7 +131,7 @@ def read_all_today_titles_from_storage(
                 all_results[source_id][title] = {
                     "ranks": ranks,
                     "url": item.url or "",
-                    "mobileUrl": item.mobile_url or "",
+                    "mobile_url": item.mobile_url or "",
                 }
 
                 title_info[source_id][title] = {
@@ -140,7 +140,7 @@ def read_all_today_titles_from_storage(
                     "count": count,
                     "ranks": ranks,
                     "url": item.url or "",
-                    "mobileUrl": item.mobile_url or "",
+                    "mobile_url": item.mobile_url or "",
                     "rank_timeline": rank_timeline,
                 }
 
@@ -220,7 +220,7 @@ def detect_latest_new_titles_from_storage(
                 latest_titles[source_id][item.title] = {
                     "ranks": [item.rank],
                     "url": item.url or "",
-                    "mobileUrl": item.mobile_url or "",
+                    "mobile_url": item.mobile_url or "",
                 }
 
         # 步骤2：收集历史标题

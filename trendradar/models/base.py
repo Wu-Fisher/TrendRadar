@@ -87,3 +87,59 @@ class BaseNewsItem(ToDictMixin):
     def __post_init__(self):
         if not self.crawl_time:
             self.crawl_time = datetime.now().strftime("%H:%M")
+
+
+# 字段名映射：camelCase → snake_case
+FIELD_NAME_MAPPING = {
+    "mobileUrl": "mobile_url",
+    "crawlTime": "crawl_time",
+    "publishedAt": "published_at",
+    "firstTime": "first_time",
+    "lastTime": "last_time",
+    "rankTimeline": "rank_timeline",
+}
+
+
+def normalize_news_item(data: Dict[str, Any], to_snake_case: bool = True) -> Dict[str, Any]:
+    """
+    规范化新闻条目字段名
+
+    Args:
+        data: 原始数据字典
+        to_snake_case: True 转为 snake_case，False 转为 camelCase
+
+    Returns:
+        规范化后的字典（新字典，不修改原数据）
+    """
+    if not data:
+        return data
+
+    result = dict(data)
+
+    if to_snake_case:
+        # camelCase → snake_case
+        for camel, snake in FIELD_NAME_MAPPING.items():
+            if camel in result and snake not in result:
+                result[snake] = result.pop(camel)
+    else:
+        # snake_case → camelCase (反向映射)
+        for camel, snake in FIELD_NAME_MAPPING.items():
+            if snake in result and camel not in result:
+                result[camel] = result.pop(snake)
+
+    return result
+
+
+def get_mobile_url(data: Dict[str, Any], default: str = "") -> str:
+    """
+    获取移动端 URL（兼容两种字段名）
+
+    Args:
+        data: 数据字典
+        default: 默认值
+
+    Returns:
+        mobile_url 值
+    """
+    return data.get("mobile_url") or data.get("mobileUrl") or default
+

@@ -8,6 +8,7 @@ HTML 报告渲染模块
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Callable
 
+from trendradar.models import get_mobile_url
 from trendradar.report.helpers import html_escape
 from trendradar.utils.time import convert_time_for_display, format_iso_time_friendly
 from trendradar.ai.formatter import render_ai_analysis_html_rich
@@ -1207,7 +1208,7 @@ def render_html_content(
             # 渲染每个条目（复用 news-item 结构）
             for j, item in enumerate(items, 1):
                 title = item.get("title", "")
-                url = item.get("url", "") or item.get("mobileUrl", "")
+                url = item.get("url", "") or get_mobile_url(item)
                 rank = item.get("rank", 0)
                 ranks = item.get("ranks", [])
                 first_time = item.get("first_time", "")
