@@ -15,39 +15,14 @@
 
 import asyncio
 import json
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from trendradar.crawler.custom.base import CrawlerNewsItem
+from trendradar.models import NewsAnalysisResult
 
-
-@dataclass
-class ItemAnalysisResult:
-    """单条新闻分析结果"""
-    seq: str                          # 新闻序号
-    sentiment: str = ""               # 情感: positive/negative/neutral
-    importance: int = 0               # 重要性: 1-10
-    entities: List[str] = field(default_factory=list)  # 关键实体
-    summary: str = ""                 # 简短摘要
-    tags: List[str] = field(default_factory=list)      # 自动标签
-    raw_response: str = ""            # 原始响应
-    success: bool = False             # 是否成功
-    error: str = ""                   # 错误信息
-    analysis_time: str = ""           # 分析时间
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "seq": self.seq,
-            "sentiment": self.sentiment,
-            "importance": self.importance,
-            "entities": self.entities,
-            "summary": self.summary,
-            "tags": self.tags,
-            "success": self.success,
-            "error": self.error,
-            "analysis_time": self.analysis_time,
-        }
+# 向后兼容别名
+ItemAnalysisResult = NewsAnalysisResult
 
 
 class NewsItemAnalyzer:
@@ -107,10 +82,8 @@ class NewsItemAnalyzer:
         Returns:
             ItemAnalysisResult: 分析结果
         """
-        result = ItemAnalysisResult(
-            seq=item.seq,
-            analysis_time=datetime.now().isoformat(),
-        )
+        result = ItemAnalysisResult(news_id=item.seq)
+        result.success = False  # 默认失败，成功时显式设置
 
         if not self._enabled:
             result.error = "AI 分析未启用"
@@ -144,11 +117,10 @@ class NewsItemAnalyzer:
 
             # 解析响应
             result = self._parse_response(item.seq, response)
-            result.analysis_time = datetime.now().isoformat()
 
             # 更新原始条目
             item.ai_analysis = json.dumps(result.to_dict(), ensure_ascii=False)
-            item.ai_analysis_time = result.analysis_time
+            item.ai_analysis_time = result.analyzed_at
 
             return result
 
@@ -195,9 +167,10 @@ class NewsItemAnalyzer:
         tasks = [analyze_with_limit(item) for item in items]
         return await asyncio.gather(*tasks)
 
-    def _parse_response(self, seq: str, response: str) -> ItemAnalysisResult:
+    def _parse_response(self, news_id: str, response: str) -> ItemAnalysisResult:
         """解析 AI 响应"""
-        result = ItemAnalysisResult(seq=seq, raw_response=response)
+        result = ItemAnalysisResult(news_id=news_id, raw_response=response)
+        result.success = False  # 默认失败
 
         try:
             # 提取 JSON

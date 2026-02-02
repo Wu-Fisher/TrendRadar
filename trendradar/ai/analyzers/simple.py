@@ -11,42 +11,15 @@
 
 import json
 import os
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from trendradar.ai.client import AIClient
+from trendradar.models import NewsAnalysisResult
 
-
-@dataclass
-class AnalysisResult:
-    """分析结果"""
-    news_id: str                        # 新闻 ID
-    summary: str = ""                   # 摘要
-    keywords: List[str] = field(default_factory=list)  # 关键词
-    sentiment: str = "neutral"          # 情感
-    importance: int = 3                 # 重要性 1-5
-    category: str = ""                  # 分类
-    raw_response: str = ""              # 原始响应
-    success: bool = True
-    error: str = ""
-    analyzed_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    model_used: str = ""
-
-    def to_dict(self) -> Dict:
-        return {
-            "news_id": self.news_id,
-            "summary": self.summary,
-            "keywords": self.keywords,
-            "sentiment": self.sentiment,
-            "importance": self.importance,
-            "category": self.category,
-            "success": self.success,
-            "error": self.error,
-            "analyzed_at": self.analyzed_at,
-            "model_used": self.model_used,
-        }
+# 向后兼容：保持 AnalysisResult 别名
+AnalysisResult = NewsAnalysisResult
 
 
 class SimpleAnalyzer:

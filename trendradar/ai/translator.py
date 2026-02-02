@@ -7,29 +7,11 @@ AI 翻译器模块
 """
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from trendradar.ai.client import AIClient
-
-
-@dataclass
-class TranslationResult:
-    """翻译结果"""
-    translated_text: str = ""       # 翻译后的文本
-    original_text: str = ""         # 原始文本
-    success: bool = False           # 是否成功
-    error: str = ""                 # 错误信息
-
-
-@dataclass
-class BatchTranslationResult:
-    """批量翻译结果"""
-    results: List[TranslationResult] = field(default_factory=list)
-    success_count: int = 0
-    fail_count: int = 0
-    total_count: int = 0
+from trendradar.models import TranslationResult, BatchTranslationResult
 
 
 class AITranslator:

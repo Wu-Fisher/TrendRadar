@@ -898,11 +898,36 @@ README.md 包含以下内容：
 
 ### 10.2 短期实施（P1 - 进行中）
 
-| 序号 | 任务 | 预期效果 | 验证方法 |
-|------|------|----------|----------|
-| 1 | 创建 `trendradar/models/` 模块 | 数据结构统一 | 运行所有功能验证兼容 |
-| 2 | 引入 logging 模块 | 日志可配置 | 验证日志级别过滤 |
-| 3 | 字段命名统一（mobileUrl → mobile_url） | 代码规范 | 全文搜索确认 |
+| 序号 | 任务 | 状态 | 验证方法 |
+|------|------|------|----------|
+| 1 | 创建 `trendradar/models/` 模块 | ✅ 完成 | 单元测试通过，Docker 验证 |
+| 2 | 引入 logging 模块 | 待开始 | 验证日志级别过滤 |
+| 3 | 字段命名统一（mobileUrl → mobile_url） | 待开始 | 全文搜索确认 |
+
+**P1-1 数据模型统一 实施详情：**
+
+| 创建/修改文件 | 改动内容 |
+|--------------|----------|
+| `trendradar/models/__init__.py` | 新建，统一导出所有数据模型 |
+| `trendradar/models/base.py` | 新建，定义 ToDictMixin, BaseResult, BaseAnalysisResult, BaseNewsItem |
+| `trendradar/models/analysis.py` | 新建，定义 NewsAnalysisResult, BatchAnalysisResult, TranslationResult |
+| `trendradar/models/queue.py` | 新建，定义 TaskStatus, QueueTask |
+| `trendradar/ai/analyzers/simple.py` | 迁移使用 models.NewsAnalysisResult |
+| `trendradar/ai/translator.py` | 迁移使用 models.TranslationResult, BatchTranslationResult |
+| `trendradar/ai/item_analyzer.py` | 迁移使用 models.NewsAnalysisResult |
+| `trendradar/ai/queue/manager.py` | 迁移使用 models.TaskStatus, QueueTask |
+
+**向后兼容别名：**
+- `AnalysisResult` → `NewsAnalysisResult`
+- `ItemAnalysisResult` → `NewsAnalysisResult`
+- `AIAnalysisResult` → `BatchAnalysisResult`
+
+**测试验证：**
+- ✅ 所有模型导入测试通过
+- ✅ TaskStatus 枚举值正确 (PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED)
+- ✅ QueueTask 状态流转正确
+- ✅ TranslationResult 默认 success=False（与原行为一致）
+- ✅ Docker 重建验证通过
 
 ### 10.3 中期实施（P2 - 后续迭代）
 

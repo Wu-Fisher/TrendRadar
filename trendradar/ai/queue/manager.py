@@ -12,47 +12,12 @@ AI 队列管理器
 import asyncio
 import uuid
 import threading
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Dict, List, Optional, Callable, Any
 from collections import deque
 import queue
 
-
-class TaskStatus(Enum):
-    """任务状态"""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-@dataclass
-class QueueTask:
-    """队列任务"""
-    id: str
-    data: Any
-    status: TaskStatus = TaskStatus.PENDING
-    result: Any = None
-    error: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    started_at: str = ""
-    completed_at: str = ""
-    retry_count: int = 0
-
-    def to_dict(self) -> Dict:
-        return {
-            "id": self.id,
-            "status": self.status.value,
-            "result": self.result,
-            "error": self.error,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "retry_count": self.retry_count,
-        }
+from trendradar.models import TaskStatus, QueueTask
 
 
 class AIQueueManager:
