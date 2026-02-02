@@ -40,9 +40,13 @@ from typing import Optional, List, Dict, Callable
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from trendradar.logging import setup_logging, get_logger
 from trendradar.core.loader import load_config
 from trendradar.crawler.runner import CrawlerRunner
 from trendradar.crawler.custom import CrawlerNewsItem, FetchStatus
+
+# 初始化日志器
+logger = get_logger("daemon")
 
 
 # === 简单的 Webhook 发送函数 ===
@@ -65,14 +69,14 @@ def _send_webhook_feishu(webhook_url: str, subject: str, content: str, verbose: 
                 result = response.json()
                 if result.get("StatusCode") == 0 or result.get("code") == 0:
                     if verbose:
-                        print(f"[Daemon] 飞书{account_label}推送成功")
+                        logger.debug(f"飞书{account_label}推送成功")
                     success = True
                 else:
-                    print(f"[Daemon] 飞书{account_label}推送失败: {result.get('msg', '未知错误')}")
+                    logger.warning(f"飞书{account_label}推送失败: {result.get('msg', '未知错误')}")
             else:
-                print(f"[Daemon] 飞书{account_label}推送失败: HTTP {response.status_code}")
+                logger.warning(f"飞书{account_label}推送失败: HTTP {response.status_code}")
         except Exception as e:
-            print(f"[Daemon] 飞书{account_label}推送异常: {e}")
+            logger.error(f"飞书{account_label}推送异常: {e}")
 
     return success
 
@@ -94,14 +98,14 @@ def _send_webhook_dingtalk(webhook_url: str, subject: str, content: str, verbose
                 result = response.json()
                 if result.get("errcode") == 0:
                     if verbose:
-                        print(f"[Daemon] 钉钉{account_label}推送成功")
+                        logger.debug(f"钉钉{account_label}推送成功")
                     success = True
                 else:
-                    print(f"[Daemon] 钉钉{account_label}推送失败: {result.get('errmsg', '未知错误')}")
+                    logger.warning(f"钉钉{account_label}推送失败: {result.get('errmsg', '未知错误')}")
             else:
-                print(f"[Daemon] 钉钉{account_label}推送失败: HTTP {response.status_code}")
+                logger.warning(f"钉钉{account_label}推送失败: HTTP {response.status_code}")
         except Exception as e:
-            print(f"[Daemon] 钉钉{account_label}推送异常: {e}")
+            logger.error(f"钉钉{account_label}推送异常: {e}")
 
     return success
 
@@ -124,14 +128,14 @@ def _send_webhook_wework(webhook_url: str, subject: str, content: str, msg_type:
                 result = response.json()
                 if result.get("errcode") == 0:
                     if verbose:
-                        print(f"[Daemon] 企业微信{account_label}推送成功")
+                        logger.debug(f"企业微信{account_label}推送成功")
                     success = True
                 else:
-                    print(f"[Daemon] 企业微信{account_label}推送失败: {result.get('errmsg', '未知错误')}")
+                    logger.warning(f"企业微信{account_label}推送失败: {result.get('errmsg', '未知错误')}")
             else:
-                print(f"[Daemon] 企业微信{account_label}推送失败: HTTP {response.status_code}")
+                logger.warning(f"企业微信{account_label}推送失败: HTTP {response.status_code}")
         except Exception as e:
-            print(f"[Daemon] 企业微信{account_label}推送异常: {e}")
+            logger.error(f"企业微信{account_label}推送异常: {e}")
 
     return success
 
@@ -142,7 +146,7 @@ def _send_webhook_telegram(bot_token: str, chat_id: str, subject: str, content: 
     chat_ids = [c.strip() for c in chat_id.split(";") if c.strip()]
 
     if len(tokens) != len(chat_ids):
-        print("[Daemon] Telegram 配置错误: bot_token 和 chat_id 数量不匹配")
+        logger.error("Telegram 配置错误: bot_token 和 chat_id 数量不匹配")
         return False
 
     success = False
@@ -161,14 +165,14 @@ def _send_webhook_telegram(bot_token: str, chat_id: str, subject: str, content: 
                 result = response.json()
                 if result.get("ok"):
                     if verbose:
-                        print(f"[Daemon] Telegram{account_label}推送成功")
+                        logger.debug(f"Telegram{account_label}推送成功")
                     success = True
                 else:
-                    print(f"[Daemon] Telegram{account_label}推送失败: {result.get('description', '未知错误')}")
+                    logger.warning(f"Telegram{account_label}推送失败: {result.get('description', '未知错误')}")
             else:
-                print(f"[Daemon] Telegram{account_label}推送失败: HTTP {response.status_code}")
+                logger.warning(f"Telegram{account_label}推送失败: HTTP {response.status_code}")
         except Exception as e:
-            print(f"[Daemon] Telegram{account_label}推送异常: {e}")
+            logger.error(f"Telegram{account_label}推送异常: {e}")
 
     return success
 
@@ -245,9 +249,9 @@ class CrawlerDaemon:
                 get_time_func=get_time_func,
                 split_content_func=split_content_into_batches,
             )
-            print("[Daemon] 通知器初始化成功")
+            logger.info("通知器初始化成功")
         except Exception as e:
-            print(f"[Daemon] 通知器初始化失败: {e}")
+            logger.error("通知器初始化失败: %s", e)
             self._notifier = None
 
     def _init_ai(self):
@@ -265,16 +269,16 @@ class CrawlerDaemon:
                     if not CREWAI_AVAILABLE:
                         raise ImportError("CrewAI 未安装")
                     self._ai_analyzer = create_crew_analyzer(self.config, multi_agent=False)
-                    print(f"[Daemon] CrewAI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+                    logger.info("CrewAI 分析器初始化成功，模型: %s", self._ai_analyzer.model)
                 except ImportError as e:
-                    print(f"[Daemon] CrewAI 不可用，回退到 SimpleAnalyzer: {e}")
+                    logger.warning("CrewAI 不可用，回退到 SimpleAnalyzer: %s", e)
                     from trendradar.ai.analyzers.simple import SimpleAnalyzer
                     self._ai_analyzer = SimpleAnalyzer(self.config)
-                    print(f"[Daemon] AI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+                    logger.info("AI 分析器初始化成功，模型: %s", self._ai_analyzer.model)
             else:
                 from trendradar.ai.analyzers.simple import SimpleAnalyzer
                 self._ai_analyzer = SimpleAnalyzer(self.config)
-                print(f"[Daemon] AI 分析器初始化成功，模型: {self._ai_analyzer.model}")
+                logger.info("AI 分析器初始化成功，模型: %s", self._ai_analyzer.model)
 
             # 创建队列管理器（loader.py 已标准化为大写键名）
             ai_config = self.config.get("AI", {})
@@ -291,10 +295,10 @@ class CrawlerDaemon:
 
             # 启动队列
             self._ai_queue.start()
-            print(f"[Daemon] AI 队列已启动")
+            logger.info("AI 队列已启动")
 
         except Exception as e:
-            print(f"[Daemon] AI 初始化失败: {e}")
+            logger.error("AI 初始化失败: %s", e)
             self._ai_analyzer = None
             self._ai_queue = None
             self.enable_ai = False
@@ -333,7 +337,7 @@ class CrawlerDaemon:
             return
 
         if self.verbose:
-            print(f"[AI] 分析完成: {item.title[:30]}... -> {result.summary[:30]}...")
+            logger.debug("分析完成: %s... -> %s...", item.title[:30], result.summary[:30])
 
         # Phase 2: 发送增强推送
         if self.enable_push:
@@ -418,10 +422,10 @@ class CrawlerDaemon:
             if pushed:
                 self.stats["total_ai_pushed"] += 1
                 if self.verbose:
-                    print(f"[Daemon] AI 增强推送成功")
+                    logger.debug("AI 增强推送成功")
 
         except Exception as e:
-            print(f"[Daemon] AI 增强推送失败: {e}")
+            logger.error("AI 增强推送失败: %s", e)
 
     def _write_push_queue(self, push_type: str, subject: str, text_content: str,
                           html_content: str = None, items: list = None, ai_result=None):
@@ -473,11 +477,11 @@ class CrawlerDaemon:
             tmp_path.rename(final_path)
 
             if self.verbose:
-                print(f"[Daemon] 推送队列写入: {filename}")
+                logger.debug("推送队列写入: %s", filename)
 
         except Exception as e:
             if self.verbose:
-                print(f"[Daemon] 推送队列写入失败: {e}")
+                logger.debug("推送队列写入失败: %s", e)
 
     def _start_ai_worker(self):
         """启动 AI 分析后台线程（预留）"""
@@ -497,12 +501,12 @@ class CrawlerDaemon:
                     continue
                 except Exception as e:
                     if self.verbose:
-                        print(f"[AI Worker] 错误: {e}")
+                        logger.debug("AI Worker 错误: %s", e)
 
         self._ai_thread = threading.Thread(target=ai_worker, daemon=True, name="ai-worker")
         self._ai_thread.start()
         if self.verbose:
-            print("[Daemon] AI 分析线程已启动（预留）")
+            logger.debug("AI 分析线程已启动（预留）")
 
     def _send_notification(self, new_items: list):
         """发送即时通知（支持多渠道、多账号）"""
@@ -515,7 +519,7 @@ class CrawlerDaemon:
 
             if not items_to_push:
                 if self.verbose:
-                    print(f"[Daemon] {len(new_items)} 条新增均被过滤，跳过推送")
+                    logger.debug("%d 条新增均被过滤，跳过推送", len(new_items))
                 return
 
             # 构建推送内容
@@ -531,9 +535,9 @@ class CrawlerDaemon:
                     self._send_email_direct(subject, html_content)
                     pushed = True
                     if self.verbose:
-                        print(f"[Daemon] 邮件推送成功")
+                        logger.debug("邮件推送成功")
                 except Exception as e:
-                    print(f"[Daemon] 邮件推送失败: {e}")
+                    logger.error("邮件推送失败: %s", e)
 
             # 飞书推送（使用新的 webhook 函数，支持多账号）
             if self.config.get("FEISHU_WEBHOOK_URL"):
@@ -585,12 +589,12 @@ class CrawlerDaemon:
 
             if pushed:
                 self.stats["total_pushed"] += len(items_to_push)
-                print(f"[Daemon] 推送 {len(items_to_push)} 条新消息")
+                logger.info("推送 %d 条新消息", len(items_to_push))
             elif self.verbose:
-                print(f"[Daemon] 未配置任何推送渠道")
+                logger.debug("未配置任何推送渠道")
 
         except Exception as e:
-            print(f"[Daemon] 推送失败: {e}")
+            logger.error("推送失败: %s", e)
 
     def _build_text_content(self, items: list) -> str:
         """构建纯文本推送内容（用于飞书/钉钉等）"""
@@ -716,7 +720,7 @@ class CrawlerDaemon:
                 self.stats["last_new_time"] = datetime.now().isoformat()
 
                 if self.verbose:
-                    print(f"[Daemon] 发现 {len(new_items)} 条新消息")
+                    logger.debug("发现 %d 条新消息", len(new_items))
 
                 # 即时推送
                 if self.enable_push:
@@ -730,14 +734,14 @@ class CrawlerDaemon:
                                 self._ai_queue.enqueue(item)
                             except Exception as e:
                                 if self.verbose:
-                                    print(f"[Daemon] AI 入队失败: {e}")
+                                    logger.debug("AI 入队失败: %s", e)
 
             self.stats["successful_polls"] += 1
             return {"success": True, "new_count": len(new_items), "results": results}
 
         except Exception as e:
             self.stats["failed_polls"] += 1
-            print(f"[Daemon] 爬取错误: {e}")
+            logger.error("爬取错误: %s", e)
             return {"success": False, "error": str(e)}
 
     def run(self, duration: int = 0):
@@ -749,10 +753,10 @@ class CrawlerDaemon:
         self._running = True
         self.stats["start_time"] = datetime.now().isoformat()
 
-        print(f"[Daemon] 启动爬虫守护进程")
-        print(f"[Daemon] 轮询间隔: {self.poll_interval}s")
-        print(f"[Daemon] 推送通知: {'启用' if self.enable_push else '禁用'}")
-        print(f"[Daemon] AI 分析: {'启用' if self.enable_ai else '禁用'}")
+        logger.info("启动爬虫守护进程")
+        logger.info("轮询间隔: %ds", self.poll_interval)
+        logger.info("推送通知: %s", "启用" if self.enable_push else "禁用")
+        logger.info("AI 分析: %s", "启用" if self.enable_ai else "禁用")
 
         # 初始化
         self._init_notifier()
@@ -761,7 +765,7 @@ class CrawlerDaemon:
 
         # 注册信号处理
         def signal_handler(sig, frame):
-            print("\n[Daemon] 收到停止信号，正在退出...")
+            logger.info("收到停止信号，正在退出...")
             self._running = False
             self._stop_event.set()
 
@@ -777,7 +781,7 @@ class CrawlerDaemon:
         while self._running:
             # 检查运行时长
             if duration > 0 and (time.time() - start_time) >= duration:
-                print(f"[Daemon] 达到运行时长 {duration}s，退出")
+                logger.info("达到运行时长 %ds，退出", duration)
                 break
 
             # 等待下一次
@@ -796,7 +800,7 @@ class CrawlerDaemon:
 
         # 停止 AI 队列
         if self._ai_queue:
-            print("[Daemon] 停止 AI 分析队列...")
+            logger.info("停止 AI 分析队列...")
             self._ai_queue.stop(wait=True, timeout=10.0)
 
         # 输出统计
@@ -809,20 +813,21 @@ class CrawlerDaemon:
             start = datetime.fromisoformat(self.stats["start_time"])
             elapsed = (datetime.now() - start).total_seconds()
 
-        print("\n" + "=" * 50)
-        print("[Daemon] 运行统计")
-        print("=" * 50)
-        print(f"运行时长: {elapsed:.0f}s")
-        print(f"总轮询次数: {self.stats['total_polls']}")
-        print(f"成功次数: {self.stats['successful_polls']}")
-        print(f"失败次数: {self.stats['failed_polls']}")
-        print(f"发现新消息: {self.stats['total_new_items']} 条")
-        print(f"推送消息: {self.stats['total_pushed']} 条")
+        logger.info("")
+        logger.info("=" * 50)
+        logger.info("运行统计")
+        logger.info("=" * 50)
+        logger.info("运行时长: %.0fs", elapsed)
+        logger.info("总轮询次数: %d", self.stats['total_polls'])
+        logger.info("成功次数: %d", self.stats['successful_polls'])
+        logger.info("失败次数: %d", self.stats['failed_polls'])
+        logger.info("发现新消息: %d 条", self.stats['total_new_items'])
+        logger.info("推送消息: %d 条", self.stats['total_pushed'])
         if self.enable_ai:
-            print("-" * 50)
-            print(f"AI 分析完成: {self.stats['total_ai_analyzed']} 条")
-            print(f"AI 推送消息: {self.stats['total_ai_pushed']} 条")
-        print("=" * 50)
+            logger.info("-" * 50)
+            logger.info("AI 分析完成: %d 条", self.stats['total_ai_analyzed'])
+            logger.info("AI 推送消息: %d 条", self.stats['total_ai_pushed'])
+        logger.info("=" * 50)
 
 
 def main():
@@ -836,8 +841,12 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="详细输出")
     args = parser.parse_args()
 
+    # 初始化日志系统
+    log_level = 'DEBUG' if args.verbose else 'INFO'
+    setup_logging(level=log_level)
+
     # 加载配置
-    print("[Daemon] 加载配置...")
+    logger.info("加载配置...")
     config = load_config()
 
     # 创建守护进程
@@ -853,7 +862,7 @@ def main():
     if args.once:
         # 单次运行模式
         result = daemon.run_once()
-        print(f"[Daemon] 单次运行完成: {result}")
+        logger.info("单次运行完成: %s", result)
     else:
         # 守护进程模式
         daemon.run(duration=args.duration)
