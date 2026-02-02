@@ -965,12 +965,35 @@ logger.error("错误日志: %s", error)
 - ✅ TranslationResult 默认 success=False（与原行为一致）
 - ✅ Docker 重建验证通过
 
-### 10.3 中期实施（P2 - 后续迭代）
+### 10.3 中期实施（P2 - 进行中）
 
-| 序号 | 任务 | 预期效果 | 验证方法 |
-|------|------|----------|----------|
-| 1 | 创建 ConfigManager 类 | 配置访问类型安全 | 单元测试 |
-| 2 | 添加 Makefile | 简化操作 | 验证 make 命令 |
+| 序号 | 任务 | 状态 | 验证方法 |
+|------|------|------|----------|
+| 1 | 创建配置 dataclass | ✅ 完成 | config_manager.py 中 12+ 个 dataclass |
+| 2 | 创建 ConfigManager 类 | ✅ 完成 | 类型安全访问 + 向后兼容 |
+| 3 | 迁移现有代码使用 ConfigManager | 🔄 进行中 | 逐步迁移 |
+
+**P2 实施详情：**
+
+| 创建/修改文件 | 改动内容 |
+|--------------|----------|
+| `trendradar/core/config_manager.py` | 新建，12+ 个 frozen dataclass + ConfigManager 类 |
+| `trendradar/core/__init__.py` | 导出 ConfigManager |
+
+**ConfigManager 使用方式：**
+```python
+from trendradar.core import load_config, ConfigManager
+
+config = load_config()
+manager = ConfigManager(config)
+
+# 类型安全访问
+timeout = manager.ai.timeout  # int
+webhook = manager.notification.feishu_webhook_url  # str
+
+# 向后兼容
+raw_value = manager.get("SOME_KEY", default_value)
+```
 
 ### 10.4 验证命令
 

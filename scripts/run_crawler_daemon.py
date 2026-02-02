@@ -42,6 +42,7 @@ sys.path.insert(0, str(project_root))
 
 from trendradar.logging import setup_logging, get_logger
 from trendradar.core.loader import load_config
+from trendradar.core.config_manager import ConfigManager
 from trendradar.crawler.runner import CrawlerRunner
 from trendradar.crawler.custom import CrawlerNewsItem, FetchStatus
 
@@ -190,6 +191,7 @@ class CrawlerDaemon:
         verbose: bool = False,
     ):
         self.config = config
+        self.cfg = ConfigManager(config)  # 类型安全的配置访问
         self.poll_interval = poll_interval
         self.enable_push = enable_push
         self.enable_ai = enable_ai
@@ -237,7 +239,7 @@ class CrawlerDaemon:
             import pytz
 
             # 创建时间函数
-            timezone = self.config.get("TIMEZONE", "Asia/Shanghai")
+            timezone = self.cfg.app.timezone
             tz = pytz.timezone(timezone)
 
             def get_time_func():
@@ -280,13 +282,12 @@ class CrawlerDaemon:
                 self._ai_analyzer = SimpleAnalyzer(self.config)
                 logger.info("AI 分析器初始化成功，模型: %s", self._ai_analyzer.model)
 
-            # 创建队列管理器（loader.py 已标准化为大写键名）
-            ai_config = self.config.get("AI", {})
-            queue_config = ai_config.get("QUEUE", {})
+            # 创建队列管理器（使用 ConfigManager 类型安全访问）
+            queue_cfg = self.cfg.ai.queue
             self._ai_queue = AIQueueManager(
-                max_size=queue_config.get("MAX_SIZE", 100),
-                max_workers=queue_config.get("WORKERS", 2),
-                max_retries=queue_config.get("RETRY_COUNT", 3),
+                max_size=queue_cfg.max_size,
+                max_workers=queue_cfg.workers,
+                max_retries=queue_cfg.retry_count,
             )
 
             # 设置处理函数
@@ -370,41 +371,41 @@ class CrawlerDaemon:
 
             # 发送到各渠道
             pushed = False
+            notif = self.cfg.notification  # 类型安全的通知配置
 
             # 飞书推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("FEISHU_WEBHOOK_URL"):
+            if notif.feishu_webhook_url:
                 if _send_webhook_feishu(
-                    self.config["FEISHU_WEBHOOK_URL"],
+                    notif.feishu_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # 钉钉推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("DINGTALK_WEBHOOK_URL"):
+            if notif.dingtalk_webhook_url:
                 if _send_webhook_dingtalk(
-                    self.config["DINGTALK_WEBHOOK_URL"],
+                    notif.dingtalk_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # 企业微信推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("WEWORK_WEBHOOK_URL"):
-                msg_type = self.config.get("WEWORK_MSG_TYPE", "markdown")
+            if notif.wework_webhook_url:
                 if _send_webhook_wework(
-                    self.config["WEWORK_WEBHOOK_URL"],
+                    notif.wework_webhook_url,
                     subject, text_content,
-                    msg_type=msg_type,
+                    msg_type=notif.wework_msg_type,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # Telegram 推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("TELEGRAM_BOT_TOKEN") and self.config.get("TELEGRAM_CHAT_ID"):
+            if notif.telegram_bot_token and notif.telegram_chat_id:
                 if _send_webhook_telegram(
-                    self.config["TELEGRAM_BOT_TOKEN"],
-                    self.config["TELEGRAM_CHAT_ID"],
+                    notif.telegram_bot_token,
+                    notif.telegram_chat_id,
                     subject, text_content,
                     verbose=self.verbose
                 ):
@@ -528,9 +529,10 @@ class CrawlerDaemon:
             subject = f"[同花顺快讯] {len(items_to_push)} 条新消息"
 
             pushed = False
+            notif = self.cfg.notification  # 类型安全的通知配置
 
             # 邮件推送（使用简化的直接发送）
-            if self.config.get("EMAIL_ENABLED", True) and self.config.get("EMAIL_FROM") and self.config.get("EMAIL_TO"):
+            if notif.email_enabled and notif.email_from and notif.email_to:
                 try:
                     self._send_email_direct(subject, html_content)
                     pushed = True
@@ -540,39 +542,38 @@ class CrawlerDaemon:
                     logger.error("邮件推送失败: %s", e)
 
             # 飞书推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("FEISHU_WEBHOOK_URL"):
+            if notif.feishu_webhook_url:
                 if _send_webhook_feishu(
-                    self.config["FEISHU_WEBHOOK_URL"],
+                    notif.feishu_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # 钉钉推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("DINGTALK_WEBHOOK_URL"):
+            if notif.dingtalk_webhook_url:
                 if _send_webhook_dingtalk(
-                    self.config["DINGTALK_WEBHOOK_URL"],
+                    notif.dingtalk_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # 企业微信推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("WEWORK_WEBHOOK_URL"):
-                msg_type = self.config.get("WEWORK_MSG_TYPE", "markdown")
+            if notif.wework_webhook_url:
                 if _send_webhook_wework(
-                    self.config["WEWORK_WEBHOOK_URL"],
+                    notif.wework_webhook_url,
                     subject, text_content,
-                    msg_type=msg_type,
+                    msg_type=notif.wework_msg_type,
                     verbose=self.verbose
                 ):
                     pushed = True
 
             # Telegram 推送（使用新的 webhook 函数，支持多账号）
-            if self.config.get("TELEGRAM_BOT_TOKEN") and self.config.get("TELEGRAM_CHAT_ID"):
+            if notif.telegram_bot_token and notif.telegram_chat_id:
                 if _send_webhook_telegram(
-                    self.config["TELEGRAM_BOT_TOKEN"],
-                    self.config["TELEGRAM_CHAT_ID"],
+                    notif.telegram_bot_token,
+                    notif.telegram_chat_id,
                     subject, text_content,
                     verbose=self.verbose
                 ):
@@ -647,11 +648,12 @@ class CrawlerDaemon:
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
 
-        from_email = self.config.get("EMAIL_FROM", "")
-        password = self.config.get("EMAIL_PASSWORD", "")
-        to_email = self.config.get("EMAIL_TO", "")
-        smtp_server = self.config.get("EMAIL_SMTP_SERVER", "")
-        smtp_port = self.config.get("EMAIL_SMTP_PORT", "")
+        notif = self.cfg.notification  # 类型安全的邮件配置
+        from_email = notif.email_from
+        password = notif.email_password
+        to_email = notif.email_to
+        smtp_server = notif.email_smtp_server
+        smtp_port = notif.email_smtp_port
 
         if not all([from_email, password, to_email]):
             raise ValueError("邮件配置不完整")
