@@ -10,6 +10,7 @@ from trendradar.core.config import (
     get_account_at_index,
 )
 from trendradar.core.loader import load_config
+from trendradar.core.config_manager import ConfigManager
 from trendradar.core.frequency import load_frequency_words, matches_word_groups
 from trendradar.core.data import (
     save_titles_to_file,
@@ -31,6 +32,7 @@ __all__ = [
     "limit_accounts",
     "get_account_at_index",
     "load_config",
+    "ConfigManager",
     "load_frequency_words",
     "matches_word_groups",
     # 数据处理
