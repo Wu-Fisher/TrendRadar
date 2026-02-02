@@ -108,13 +108,22 @@
 
 3. **构建并启动**
    ```bash
+   cd docker
    docker compose -f docker-compose-build.yml build
-   docker compose -f docker-compose-build.yml up -d
+   docker compose -f docker-compose-build.yml --profile feishu up -d
    ```
+
+   > 包含服务：`trendradar`（爬虫守护进程）+ `feishu_push`（飞书推送服务）
+   >
+   > feishu_push 通过 LangBot 凭证推送消息到飞书群，需要先配置 `FEISHU_CHAT_IDS`
 
 4. **查看日志**
    ```bash
+   # 爬虫日志
    docker logs -f trendradar
+
+   # 飞书推送日志
+   docker logs -f feishu_push
    ```
 
 ### 关键配置
@@ -288,10 +297,15 @@ StockTrendRadar/
 docker ps -a | grep -E "trendradar|langbot|feishu"
 
 # 查看实时日志
-docker logs -f trendradar
+docker logs -f trendradar      # 爬虫日志
+docker logs -f feishu_push     # 飞书推送日志
 
 # 重启服务
-docker compose restart trendradar
+cd docker
+docker compose -f docker-compose-build.yml --profile feishu restart
+
+# 停止服务
+docker compose -f docker-compose-build.yml --profile feishu down
 
 # 手动执行一次 (调试)
 docker exec trendradar python scripts/run_crawler_daemon.py --once --verbose
