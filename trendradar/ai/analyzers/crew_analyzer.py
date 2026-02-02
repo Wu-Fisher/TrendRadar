@@ -41,18 +41,18 @@ class CrewAnalyzer:
         初始化分析器
 
         Args:
-            config: 配置字典，包含 AI 配置
+            config: 配置字典，包含 AI 配置（由 loader.py 标准化为大写键名）
         """
-        # 提取 AI 配置
+        # 提取 AI 配置（loader.py 已标准化为大写键名）
         ai_config = config.get("AI", config)
 
-        # 处理大小写兼容
-        self.model = ai_config.get("MODEL") or ai_config.get("model", "")
-        self.api_key = ai_config.get("API_KEY") or ai_config.get("api_key", "")
-        self.api_base = ai_config.get("API_BASE") or ai_config.get("api_base", "")
-        self.temperature = float(ai_config.get("TEMPERATURE") or ai_config.get("temperature", 0.7))
-        self.max_tokens = int(ai_config.get("MAX_TOKENS") or ai_config.get("max_tokens", 2000))
-        self.timeout = int(ai_config.get("TIMEOUT") or ai_config.get("timeout", 120))
+        # 直接使用大写键名（loader.py 已保证标准化）
+        self.model = ai_config.get("MODEL", "")
+        self.api_key = ai_config.get("API_KEY", "")
+        self.api_base = ai_config.get("API_BASE", "")
+        self.temperature = float(ai_config.get("TEMPERATURE", 0.7))
+        self.max_tokens = int(ai_config.get("MAX_TOKENS", 2000))
+        self.timeout = int(ai_config.get("TIMEOUT", 120))
 
         # 初始化 LLM
         self._llm = self._create_llm()

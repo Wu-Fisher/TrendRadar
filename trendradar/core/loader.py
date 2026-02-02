@@ -220,6 +220,7 @@ def _load_display_config(config_data: Dict) -> Dict:
 def _load_ai_config(config_data: Dict) -> Dict:
     """加载 AI 模型配置（LiteLLM 格式）"""
     ai_config = config_data.get("ai", {})
+    queue_config = ai_config.get("queue", {})
 
     timeout_env = _get_env_int_or_none("AI_TIMEOUT")
 
@@ -238,6 +239,13 @@ def _load_ai_config(config_data: Dict) -> Dict:
         "NUM_RETRIES": ai_config.get("num_retries", 2),
         "FALLBACK_MODELS": ai_config.get("fallback_models", []),
         "EXTRA_PARAMS": ai_config.get("extra_params", {}),
+
+        # AI 队列配置（标准化为大写键名）
+        "QUEUE": {
+            "MAX_SIZE": queue_config.get("max_size", 100),
+            "WORKERS": queue_config.get("workers", 2),
+            "RETRY_COUNT": queue_config.get("retry_count", 3),
+        },
     }
 
 
@@ -378,6 +386,7 @@ def _load_webhook_config(config_data: Dict) -> Dict:
         "TELEGRAM_BOT_TOKEN": _get_env_str("TELEGRAM_BOT_TOKEN") or telegram.get("bot_token", ""),
         "TELEGRAM_CHAT_ID": _get_env_str("TELEGRAM_CHAT_ID") or telegram.get("chat_id", ""),
         # 邮件
+        "EMAIL_ENABLED": email.get("enabled", True),  # 默认启用，兼容旧配置
         "EMAIL_FROM": _get_env_str("EMAIL_FROM") or email.get("from", ""),
         "EMAIL_PASSWORD": _get_env_str("EMAIL_PASSWORD") or email.get("password", ""),
         "EMAIL_TO": _get_env_str("EMAIL_TO") or email.get("to", ""),
@@ -433,7 +442,7 @@ def _print_notification_sources(config: Dict) -> None:
             token_source = "环境变量" if os.environ.get("TELEGRAM_BOT_TOKEN") else "配置文件"
             notification_sources.append(f"Telegram({token_source}, {count}个账号)")
 
-    if config["EMAIL_FROM"] and config["EMAIL_PASSWORD"] and config["EMAIL_TO"]:
+    if config.get("EMAIL_ENABLED", True) and config["EMAIL_FROM"] and config["EMAIL_PASSWORD"] and config["EMAIL_TO"]:
         from_source = "环境变量" if os.environ.get("EMAIL_FROM") else "配置文件"
         notification_sources.append(f"邮件({from_source})")
 

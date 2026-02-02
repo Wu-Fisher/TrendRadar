@@ -212,6 +212,7 @@ notification:
       chat_id: ""                     # Telegram Chat ID
 
     email:
+      enabled: false                  # 是否启用邮箱推送（设为 true 启用）
       from: ""                        # 发件人邮箱地址
       password: ""                    # 发件人邮箱密码或授权码
       to: ""                          # 收件人邮箱，多个用逗号分隔
@@ -464,7 +465,7 @@ advanced:
   batch_size:
     default: 4000
     dingtalk: 20000
-    feishu: 30000
+    feishu: 29000                         # 与代码默认值保持一致（飞书限制约30KB，预留buffer）
     bark: 4000
     slack: 4000
   batch_send_interval: 3              # 批次发送间隔（秒）

@@ -258,7 +258,8 @@ class NotificationDispatcher:
 
         # 邮件（保持原有逻辑，已支持多收件人，AI 分析已嵌入 HTML）
         if (
-            self.config.get("EMAIL_FROM")
+            self.config.get("EMAIL_ENABLED", True)
+            and self.config.get("EMAIL_FROM")
             and self.config.get("EMAIL_PASSWORD")
             and self.config.get("EMAIL_TO")
         ):
@@ -794,7 +795,8 @@ class NotificationDispatcher:
 
         # 邮件
         if (
-            self.config.get("EMAIL_FROM")
+            self.config.get("EMAIL_ENABLED", True)
+            and self.config.get("EMAIL_FROM")
             and self.config.get("EMAIL_PASSWORD")
             and self.config.get("EMAIL_TO")
         ):
