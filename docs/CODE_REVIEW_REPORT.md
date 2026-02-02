@@ -901,7 +901,7 @@ README.md 包含以下内容：
 | 序号 | 任务 | 状态 | 验证方法 |
 |------|------|------|----------|
 | 1 | 创建 `trendradar/models/` 模块 | ✅ 完成 | 单元测试通过，Docker 验证 |
-| 2 | 引入 logging 模块 | 🔄 部分完成 | 模块已创建，逐步迁移中 |
+| 2 | 引入 logging 模块 | ✅ daemon 完成 | 模块已创建，daemon 63处已迁移 |
 | 3 | 字段命名统一（mobileUrl → mobile_url） | ✅ 完成 | 核心模块已迁移 |
 
 **P1-3 字段命名统一 实施详情：**
@@ -936,7 +936,7 @@ logger.error("错误日志: %s", error)
 ```
 
 **迁移计划（720 处 print 语句）：**
-- 优先迁移：scripts/run_crawler_daemon.py (63处)
+- ✅ 优先迁移：scripts/run_crawler_daemon.py (63处) - 已完成
 - 其次迁移：trendradar/notification/senders.py (93处)
 - 后续迭代：其他模块
 
