@@ -34,14 +34,33 @@
 
 ## 启动服务
 
+### 完整启动（推荐）
+
 ```bash
 cd /home/wufisher/ws/dev/TrendRadar/docker
 
-# 启动 TrendRadar (如果未运行)
-docker compose up -d trendradar
+# 1. 启动 LangBot + 插件系统（提供飞书凭证和命令交互）
+sg docker -c "docker compose -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime"
 
-# 启动 LangBot + 飞书推送
-docker compose -f docker-compose-langbot.yml up -d
+# 2. 启动 TrendRadar + 飞书推送服务
+sg docker -c "docker compose -f docker-compose-build.yml --profile feishu up -d"
+```
+
+### 服务说明
+
+| 服务 | 来源 | 功能 |
+|------|------|------|
+| `trendradar` | docker-compose-build.yml | 爬虫守护进程 |
+| `feishu_push` | docker-compose-build.yml (--profile feishu) | 推送队列 → 飞书 |
+| `langbot` | docker-compose-langbot.yml | 飞书机器人主服务 |
+| `langbot_plugin_runtime` | docker-compose-langbot.yml | 插件系统（命令交互） |
+
+### 停止服务
+
+```bash
+cd /home/wufisher/ws/dev/TrendRadar/docker
+sg docker -c "docker compose -f docker-compose-build.yml --profile feishu down"
+sg docker -c "docker compose -f docker-compose-langbot.yml down"
 ```
 
 ## 推送流程

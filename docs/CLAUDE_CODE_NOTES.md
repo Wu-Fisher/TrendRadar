@@ -36,12 +36,21 @@ sg docker -c "docker exec trendradar ls -la /app/scripts"
 ### 完整启动命令
 
 ```bash
-# 启动 TrendRadar + 飞书推送服务
 cd /home/wufisher/ws/dev/TrendRadar/docker
-sg docker -c "docker compose -f docker-compose-build.yml --profile feishu up -d --force-recreate"
 
-# 只启动 TrendRadar（不含飞书）
+# 完整启动（含 LangBot 插件系统）
+# 1. 启动 LangBot + 插件系统
+sg docker -c "docker compose -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime"
+
+# 2. 启动 TrendRadar + 飞书推送服务
+sg docker -c "docker compose -f docker-compose-build.yml --profile feishu up -d"
+
+# 只启动 TrendRadar（不含飞书推送）
 sg docker -c "docker compose -f docker-compose-build.yml up -d trendradar"
+
+# 停止所有服务
+sg docker -c "docker compose -f docker-compose-build.yml --profile feishu down"
+sg docker -c "docker compose -f docker-compose-langbot.yml down"
 ```
 
 ---
