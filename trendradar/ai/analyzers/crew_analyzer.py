@@ -19,6 +19,9 @@ from crewai import Agent, Task, Crew, Process, LLM
 from pydantic import BaseModel
 
 from .simple import AnalysisResult
+from trendradar.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class NewsAnalysisOutput(BaseModel):
@@ -105,7 +108,7 @@ class CrewAnalyzer:
             try:
                 self._prompts[file.stem] = file.read_text(encoding="utf-8")
             except Exception as e:
-                print(f"[CrewAnalyzer] 加载 Prompt 失败 {file}: {e}")
+                logger.error("加载 Prompt 失败 %s: %s", file, e)
 
     def _get_prompt(self, name: str) -> str:
         """获取 Prompt 模板"""
@@ -181,7 +184,7 @@ class CrewAnalyzer:
         except Exception as e:
             result.success = False
             result.error = str(e)[:200]
-            print(f"[CrewAnalyzer] 分析失败: {e}")
+            logger.error("分析失败: %s", e)
 
         return result
 

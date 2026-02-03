@@ -19,7 +19,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from trendradar.crawler.custom.base import CrawlerNewsItem
+from trendradar.logging import get_logger
 from trendradar.models import NewsAnalysisResult
+
+logger = get_logger(__name__)
 
 # 向后兼容别名
 ItemAnalysisResult = NewsAnalysisResult
@@ -70,7 +73,7 @@ class NewsItemAnalyzer:
             from trendradar.ai.client import AIClient
             self._client = AIClient(self.ai_config)
         except Exception as e:
-            print(f"[NewsItemAnalyzer] 初始化 AI 客户端失败: {e}")
+            logger.error("初始化 AI 客户端失败: %s", e)
             self._client = None
 
     def analyze_item_sync(self, item: CrawlerNewsItem) -> ItemAnalysisResult:

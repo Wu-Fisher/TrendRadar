@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from trendradar.ai.client import AIClient
+from trendradar.logging import get_logger
 from trendradar.models import TranslationResult, BatchTranslationResult
+
+logger = get_logger(__name__)
 
 
 class AITranslator:
@@ -46,7 +49,7 @@ class AITranslator:
         prompt_path = config_dir / prompt_file
 
         if not prompt_path.exists():
-            print(f"[翻译] 提示词文件不存在: {prompt_path}")
+            logger.warning("提示词文件不存在: %s", prompt_path)
             return "", ""
 
         content = prompt_path.read_text(encoding="utf-8")

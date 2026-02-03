@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from trendradar.ai.client import AIClient
+from trendradar.logging import get_logger
 from trendradar.models import NewsAnalysisResult
+
+logger = get_logger(__name__)
 
 # 向后兼容：保持 AnalysisResult 别名
 AnalysisResult = NewsAnalysisResult
@@ -81,7 +84,7 @@ class SimpleAnalyzer:
             try:
                 self._prompts[file.stem] = file.read_text(encoding="utf-8")
             except Exception as e:
-                print(f"[SimpleAnalyzer] 加载 Prompt 失败 {file}: {e}")
+                logger.error("加载 Prompt 失败 %s: %s", file, e)
 
     def _get_prompt(self, name: str) -> str:
         """获取 Prompt 模板"""
@@ -138,7 +141,7 @@ class SimpleAnalyzer:
         except Exception as e:
             result.success = False
             result.error = str(e)[:200]
-            print(f"[SimpleAnalyzer] 分析失败: {e}")
+            logger.error("分析失败: %s", e)
 
         return result
 
@@ -200,7 +203,7 @@ class SimpleAnalyzer:
             return response.strip()
 
         except Exception as e:
-            print(f"[SimpleAnalyzer] 摘要生成失败: {e}")
+            logger.error("摘要生成失败: %s", e)
             return ""
 
     def extract_keywords(self, news_id: str, title: str, content: str) -> List[str]:
@@ -235,7 +238,7 @@ class SimpleAnalyzer:
             return json.loads(json_str.strip())
 
         except Exception as e:
-            print(f"[SimpleAnalyzer] 关键词提取失败: {e}")
+            logger.error("关键词提取失败: %s", e)
             return []
 
     @property
