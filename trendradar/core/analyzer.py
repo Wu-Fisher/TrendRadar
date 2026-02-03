@@ -11,7 +11,10 @@
 from typing import Dict, List, Tuple, Optional, Callable
 
 from trendradar.core.frequency import matches_word_groups, _word_matches
+from trendradar.logging import get_logger
 from trendradar.models import get_mobile_url
+
+logger = get_logger(__name__)
 
 
 def calculate_news_weight(
@@ -146,7 +149,7 @@ def count_word_frequency(
 
     # 如果没有配置词组，创建一个包含所有新闻的虚拟词组
     if not word_groups:
-        print("频率词配置为空，将显示所有新闻")
+        logger.info("频率词配置为空，将显示所有新闻")
         word_groups = [{"required": [], "normal": [], "group_key": "全部新闻"}]
         filter_words = []  # 清空过滤词，显示所有新闻
 
@@ -188,8 +191,9 @@ def count_word_frequency(
                             results_to_process[source_id] = filtered_titles
 
                 if not quiet:
-                    print(
-                        f"当前榜单模式：最新时间 {latest_time}，筛选出 {sum(len(titles) for titles in results_to_process.values())} 条当前榜单新闻"
+                    logger.info(
+                        "当前榜单模式：最新时间 %s，筛选出 %d 条当前榜单新闻",
+                        latest_time, sum(len(titles) for titles in results_to_process.values())
                     )
             else:
                 results_to_process = results
@@ -206,7 +210,7 @@ def count_word_frequency(
             if len(word_groups) == 1 and word_groups[0]["group_key"] == "全部新闻"
             else "频率词过滤"
         )
-        print(f"当日汇总模式：处理 {total_input_news} 条新闻，模式：{filter_status}")
+        logger.info("当日汇总模式：处理 %d 条新闻，模式：%s", total_input_news, filter_status)
 
     word_stats = {}
     total_titles = 0
@@ -374,8 +378,9 @@ def count_word_frequency(
                 else "频率词匹配"
             )
             if not quiet:
-                print(
-                    f"增量模式：当天第一次爬取，{total_input_news} 条新闻中有 {matched_new_count} 条{filter_status}"
+                logger.info(
+                    "增量模式：当天第一次爬取，%d 条新闻中有 %d 条%s",
+                    total_input_news, matched_new_count, filter_status
                 )
         else:
             if new_titles:
@@ -387,14 +392,15 @@ def count_word_frequency(
                     else "匹配频率词"
                 )
                 if not quiet:
-                    print(
-                        f"增量模式：{total_new_count} 条新增新闻中，有 {matched_new_count} 条{filter_status}"
+                    logger.info(
+                        "增量模式：%d 条新增新闻中，有 %d 条%s",
+                        total_new_count, matched_new_count, filter_status
                     )
                     if matched_new_count == 0 and len(word_groups) > 1:
-                        print("增量模式：没有新增新闻匹配频率词，将不会发送通知")
+                        logger.info("增量模式：没有新增新闻匹配频率词，将不会发送通知")
             else:
                 if not quiet:
-                    print("增量模式：未检测到新增新闻")
+                    logger.info("增量模式：未检测到新增新闻")
     elif mode == "current":
         total_input_news = sum(len(titles) for titles in results_to_process.values())
         if is_first_today:
@@ -404,8 +410,9 @@ def count_word_frequency(
                 else "频率词匹配"
             )
             if not quiet:
-                print(
-                    f"当前榜单模式：当天第一次爬取，{total_input_news} 条当前榜单新闻中有 {matched_new_count} 条{filter_status}"
+                logger.info(
+                    "当前榜单模式：当天第一次爬取，%d 条当前榜单新闻中有 %d 条%s",
+                    total_input_news, matched_new_count, filter_status
                 )
         else:
             matched_count = sum(stat["count"] for stat in word_stats.values())
@@ -415,8 +422,9 @@ def count_word_frequency(
                 else "频率词匹配"
             )
             if not quiet:
-                print(
-                    f"当前榜单模式：{total_input_news} 条当前榜单新闻中有 {matched_count} 条{filter_status}"
+                logger.info(
+                    "当前榜单模式：%d 条当前榜单新闻中有 %d 条%s",
+                    total_input_news, matched_count, filter_status
                 )
 
     stats = []
@@ -483,8 +491,8 @@ def count_word_frequency(
     # 打印过滤后的匹配新闻数
     matched_news_count = sum(len(stat["titles"]) for stat in stats if stat["count"] > 0)
     if not quiet and mode == "daily":
-        print(f"当日汇总模式：处理 {total_titles} 条新闻，模式：频率词过滤")
-        print(f"频率词过滤后：{matched_news_count} 条新闻匹配")
+        logger.info("当日汇总模式：处理 %d 条新闻，模式：频率词过滤", total_titles)
+        logger.info("频率词过滤后：%d 条新闻匹配", matched_news_count)
 
     return stats, total_titles
 
@@ -553,7 +561,7 @@ def count_rss_frequency(
     # 如果没有配置词组，创建一个包含所有条目的虚拟词组
     if not word_groups:
         if not quiet:
-            print("[RSS] 频率词配置为空，将显示所有条目")
+            logger.info("[RSS] 频率词配置为空，将显示所有条目")
         # 检查第一个条目的 feed_name 来决定组名
         default_group_name = "全部 RSS"
         if rss_items:
@@ -716,7 +724,7 @@ def count_rss_frequency(
 
     matched_count = sum(stat["count"] for stat in stats)
     if not quiet:
-        print(f"[RSS] 关键词分组统计：{matched_count}/{total_items} 条匹配")
+        logger.info("[RSS] 关键词分组统计：%d/%d 条匹配", matched_count, total_items)
 
     return stats, total_items
 
