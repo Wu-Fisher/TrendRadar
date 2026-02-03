@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from trendradar.constants import Timeouts
 from trendradar.logging import get_logger
 from .batch import add_batch_headers, get_max_batch_header_size
 from .formatters import convert_markdown_to_mrkdwn, strip_markdown
@@ -180,7 +181,7 @@ def send_to_feishu(
 
         try:
             response = requests.post(
-                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
+                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
             if response.status_code == 200:
                 result = response.json()
@@ -313,7 +314,7 @@ def send_to_dingtalk(
 
         try:
             response = requests.post(
-                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
+                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
             if response.status_code == 200:
                 result = response.json()
@@ -446,7 +447,7 @@ def send_to_wework(
 
         try:
             response = requests.post(
-                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
+                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
             if response.status_code == 200:
                 result = response.json()
@@ -570,7 +571,7 @@ def send_to_telegram(
 
         try:
             response = requests.post(
-                url, headers=headers, json=payload, proxies=proxies, timeout=30
+                url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
             if response.status_code == 200:
                 result = response.json()
@@ -704,14 +705,14 @@ TrendRadar 热点分析报告
         try:
             if use_tls:
                 # TLS 模式
-                server = smtplib.SMTP(smtp_server, smtp_port, timeout=30)
+                server = smtplib.SMTP(smtp_server, smtp_port, timeout=Timeouts.HTTP_REQUEST)
                 server.set_debuglevel(0)  # 设为1可以查看详细调试信息
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
             else:
                 # SSL 模式
-                server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30)
+                server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=Timeouts.HTTP_REQUEST)
                 server.set_debuglevel(0)
                 server.ehlo()
 
@@ -890,7 +891,7 @@ def send_to_ntfy(
                 headers=current_headers,
                 data=batch_content.encode("utf-8"),
                 proxies=proxies,
-                timeout=30,
+                timeout=Timeouts.HTTP_REQUEST,
             )
 
             if response.status_code == 200:
@@ -909,7 +910,7 @@ def send_to_ntfy(
                     headers=current_headers,
                     data=batch_content.encode("utf-8"),
                     proxies=proxies,
-                    timeout=30,
+                    timeout=Timeouts.HTTP_REQUEST,
                 )
                 if retry_response.status_code == 200:
                     logger.info("%s第 %d/%d 批次重试成功 [%s]", log_prefix, actual_batch_num, total_batches, report_type)
@@ -1075,7 +1076,7 @@ def send_to_bark(
                 api_endpoint,
                 json=payload,
                 proxies=proxies,
-                timeout=30,
+                timeout=Timeouts.HTTP_REQUEST,
             )
 
             if response.status_code == 200:
@@ -1210,7 +1211,7 @@ def send_to_slack(
 
         try:
             response = requests.post(
-                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
+                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
 
             # Slack Incoming Webhooks 成功时返回 "ok" 文本
@@ -1348,7 +1349,7 @@ def send_to_generic_webhook(
                 payload = {"title": report_type, "content": batch_content}
 
             response = requests.post(
-                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
+                webhook_url, headers=headers, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
             )
 
             if response.status_code >= 200 and response.status_code < 300:
