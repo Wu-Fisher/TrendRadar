@@ -1,271 +1,228 @@
 # TrendRadar PushQueue Plugin - 事件监听器
-# 监听 .push_queue 目录，处理推送消息
+# 监听 .push_queue 目录，处理推送消息并发送到飞书
+"""
+配置项 (通过 LangBot WebUI 设置):
+- bot_uuid: LangBot Bot UUID
+- target_type: 目标类型 (group/person)
+- target_id: 飞书群 chat_id
+- queue_dir: 推送队列目录
+- poll_interval: 轮询间隔（秒）
+- feishu_app_id: 飞书应用 App ID
+- feishu_app_secret: 飞书应用 App Secret
+"""
 from __future__ import annotations
 
-import os
 import json
 import asyncio
 import logging
+import time
+import httpx
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, Optional
 
 from langbot_plugin.api.definition.components.common.event_listener import EventListener
-from langbot_plugin.api.entities import events, context
-from langbot_plugin.api.entities.builtin.platform import message as platform_message
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('PushQueue')
 
 
+class FeishuDirectSender:
+    """飞书 API 消息发送器"""
+
+    def __init__(self, app_id: str, app_secret: str):
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self._token: Optional[str] = None
+        self._token_expire: float = 0
+
+    async def _get_token(self) -> str:
+        """获取 tenant_access_token（带缓存）"""
+        if self._token and time.time() < self._token_expire - 300:
+            return self._token
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+                json={"app_id": self.app_id, "app_secret": self.app_secret}
+            )
+            data = resp.json()
+            if data.get("code") == 0:
+                self._token = data["tenant_access_token"]
+                self._token_expire = time.time() + data.get("expire", 7200)
+                return self._token
+            raise Exception(f"获取飞书 token 失败: {data}")
+
+    async def send_message(self, chat_id: str, text: str) -> Dict[str, Any]:
+        """发送文本消息"""
+        token = await self._get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "receive_id": chat_id,
+                    "msg_type": "text",
+                    "content": json.dumps({"text": text})
+                }
+            )
+            data = resp.json()
+            if data.get("code") == 0:
+                return data
+            raise Exception(f"飞书消息发送失败: {data}")
+
+
 class PushQueueEventListener(EventListener):
-    """推送队列监听器"""
+    """推送队列监听器 - 轮询目录并发送消息到飞书"""
 
     def __init__(self):
         super().__init__()
-        self.bot_uuid = None
-        self.target_type = "group"
-        self.target_id = None
-        self.queue_dir = None
-        self.processed_dir = None
-        self.poll_interval = 2  # 轮询间隔（秒）
-        self._running = False
-        self._poll_task = None
-
-        # 统计
-        self.stats = {
-            "processed": 0,
-            "sent": 0,
-            "failed": 0,
-            "start_time": None
-        }
+        self.target_id: Optional[str] = None
+        self.queue_dir: Optional[Path] = None
+        self.processed_dir: Optional[Path] = None
+        self.poll_interval: int = 2
+        self._running: bool = False
+        self._poll_task: Optional[asyncio.Task] = None
+        self.feishu_sender: Optional[FeishuDirectSender] = None
+        self.stats = {"processed": 0, "sent": 0, "failed": 0}
 
     async def initialize(self):
         await super().initialize()
-        print("[PushQueue] initialize() 开始执行")
-
-        # 从插件配置获取参数
         config = self.plugin.get_config()
-        print(f"[PushQueue] 配置: {config}")
-        self.bot_uuid = config.get("bot_uuid")
-        self.target_type = config.get("target_type", "group")
+
+        # 配置
         self.target_id = config.get("target_id")
         self.poll_interval = config.get("poll_interval", 2)
-
-        # 队列目录
         queue_path = config.get("queue_dir", "/app/trendradar_config/.push_queue")
         self.queue_dir = Path(queue_path)
         self.processed_dir = self.queue_dir / ".processed"
+
+        # 飞书直连
+        feishu_app_id = config.get("feishu_app_id")
+        feishu_app_secret = config.get("feishu_app_secret")
+        if feishu_app_id and feishu_app_secret:
+            self.feishu_sender = FeishuDirectSender(feishu_app_id, feishu_app_secret)
+            logger.info("PushQueue: 飞书直连模式已启用")
+        else:
+            logger.warning("PushQueue: 未配置飞书凭证")
+            return
+
+        if not self.target_id:
+            logger.error("PushQueue: 缺少 target_id 配置")
+            return
 
         # 确保目录存在
         self.queue_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"PushQueue 插件初始化")
-        logger.info(f"  bot_uuid: {self.bot_uuid}")
-        logger.info(f"  target_type: {self.target_type}")
-        logger.info(f"  target_id: {self.target_id}")
-        logger.info(f"  queue_dir: {self.queue_dir}")
-        logger.info(f"  poll_interval: {self.poll_interval}s")
-
-        if not self.bot_uuid or not self.target_id:
-            print("[PushQueue] 错误: 缺少必要配置 (bot_uuid 或 target_id)")
-            logger.error("PushQueue: 缺少必要配置 (bot_uuid 或 target_id)")
-            return
-
-        # 启动轮询任务
+        # 启动轮询
         self._running = True
-        self.stats["start_time"] = datetime.now().isoformat()
         self._poll_task = asyncio.create_task(self._poll_queue())
-        print("[PushQueue] 队列轮询已启动")
-        logger.info("PushQueue: 队列轮询已启动")
+        logger.info(f"PushQueue: 已启动 (queue={self.queue_dir}, interval={self.poll_interval}s)")
 
     async def _poll_queue(self):
         """轮询队列目录"""
-        print(f"[PushQueue] _poll_queue 开始运行, queue_dir={self.queue_dir}")
         while self._running:
             try:
                 await self._process_queue()
             except Exception as e:
-                print(f"[PushQueue] 轮询错误: {e}")
                 logger.error(f"PushQueue: 轮询错误 - {e}")
-
             await asyncio.sleep(self.poll_interval)
 
     async def _process_queue(self):
         """处理队列中的所有文件"""
-        if not self.queue_dir.exists():
+        if not self.queue_dir or not self.queue_dir.exists():
             return
 
-        # 获取所有待处理文件
         files = sorted([
             f for f in self.queue_dir.glob("*.json")
             if not f.name.startswith(".") and not f.name.startswith("error_")
         ])
-
-        if files:
-            print(f"[PushQueue] 发现 {len(files)} 个待处理文件")
 
         for file_path in files:
             await self._process_file(file_path)
 
     async def _process_file(self, file_path: Path):
         """处理单个推送文件"""
-        print(f"[PushQueue] 处理文件: {file_path.name}")
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            # 构建消息
-            message_chain = self._build_message(data)
-
-            if message_chain:
-                # 通过 LangBot 发送消息
-                await self.plugin.send_message(
-                    bot_uuid=self.bot_uuid,
-                    target_type=self.target_type,
-                    target_id=self.target_id,
-                    message_chain=message_chain,
-                )
-                logger.info(f"PushQueue: 发送成功 - {file_path.name}")
+            message_text = self._build_message_text(data)
+            if message_text and self.feishu_sender and self.target_id:
+                await self.feishu_sender.send_message(self.target_id, message_text)
                 self.stats["sent"] += 1
 
             # 移动到已处理目录
-            processed_path = self.processed_dir / file_path.name
-            file_path.rename(processed_path)
+            (self.processed_dir / file_path.name).unlink(missing_ok=True)
+            file_path.rename(self.processed_dir / file_path.name)
             self.stats["processed"] += 1
 
         except Exception as e:
             logger.error(f"PushQueue: 处理失败 {file_path.name} - {e}")
             self.stats["failed"] += 1
-
-            # 移动到错误文件
             try:
-                error_path = self.processed_dir / f"error_{file_path.name}"
-                file_path.rename(error_path)
-            except:
+                file_path.rename(self.processed_dir / f"error_{file_path.name}")
+            except Exception:
                 pass
 
-    def _build_message(self, data: Dict[str, Any]) -> platform_message.MessageChain:
-        """根据数据构建消息"""
+    def _build_message_text(self, data: Dict[str, Any]) -> str:
+        """构建消息文本"""
         push_type = data.get("type", "raw")
-
         if push_type == "ai_analysis":
-            return self._build_ai_message(data)
+            return self._build_ai_text(data)
         elif push_type == "daily_report":
-            return self._build_daily_report(data)
-        else:
-            return self._build_raw_message(data)
+            return self._build_daily_text(data)
+        return self._build_raw_text(data)
 
-    def _build_raw_message(self, data: Dict[str, Any]) -> platform_message.MessageChain:
-        """构建原始消息"""
-        lines = []
-        subject = data.get("subject", "新消息")
-        items = data.get("items", [])
-
-        lines.append(f"📰 {subject}")
-        lines.append("━" * 20)
-
-        for i, item in enumerate(items[:10], 1):
-            title = item.get("title", "")
-            url = item.get("url", "")
-            published_at = item.get("published_at", "")
+    def _build_raw_text(self, data: Dict[str, Any]) -> str:
+        """原始消息格式"""
+        lines = [f"📰 {data.get('subject', '新消息')}", "━" * 20]
+        for i, item in enumerate(data.get("items", [])[:10], 1):
             keywords = item.get("matched_keywords", [])
-            keyword_tag = f" 【{', '.join(keywords)}】" if keywords else ""
-
-            lines.append(f"\n{i}. {title}{keyword_tag}")
-            if published_at:
-                lines.append(f"   🕐 {published_at}")
-            if url:
-                lines.append(f"   🔗 {url}")
-
-        if len(items) > 10:
-            lines.append(f"\n... 还有 {len(items) - 10} 条消息")
-
-        text = "\n".join(lines)
-        return platform_message.MessageChain([platform_message.Plain(text=text)])
-
-    def _build_ai_message(self, data: Dict[str, Any]) -> platform_message.MessageChain:
-        """构建 AI 分析消息"""
-        lines = []
-        ai_result = data.get("ai_result", {})
-        items = data.get("items", [])
-
-        lines.append("🤖 AI 分析报告")
-        lines.append("━" * 20)
-
-        # 新闻标题
-        if items:
-            item = items[0]
-            lines.append(f"📰 {item.get('title', 'AI分析')}")
+            tag = f" 【{', '.join(keywords)}】" if keywords else ""
+            lines.append(f"\n{i}. {item.get('title', '')}{tag}")
             if item.get("published_at"):
-                lines.append(f"🕐 发布时间: {item['published_at']}")
+                lines.append(f"   🕐 {item['published_at']}")
             if item.get("url"):
-                lines.append(f"🔗 {item['url']}")
-            lines.append("")
+                lines.append(f"   🔗 {item['url']}")
+        if len(data.get("items", [])) > 10:
+            lines.append(f"\n... 还有 {len(data['items']) - 10} 条")
+        return "\n".join(lines)
 
-        # AI 分析结果
-        if ai_result.get("summary"):
-            lines.append(f"📝 摘要: {ai_result['summary']}")
-
-        if ai_result.get("keywords"):
-            lines.append(f"🏷️ 关键词: {', '.join(ai_result['keywords'])}")
-
-        if ai_result.get("sentiment"):
-            emoji = {"positive": "📈", "negative": "📉", "neutral": "➡️"}.get(
-                ai_result["sentiment"], "➡️"
-            )
-            lines.append(f"{emoji} 情感: {ai_result['sentiment']}")
-
-        if ai_result.get("importance"):
-            lines.append(f"⭐ 重要性: {'⭐' * ai_result['importance']}")
-
-        text = "\n".join(lines)
-        return platform_message.MessageChain([platform_message.Plain(text=text)])
-
-    def _build_daily_report(self, data: Dict[str, Any]) -> platform_message.MessageChain:
-        """构建日报消息"""
-        # 如果有预格式化消息，直接使用
-        message = data.get("message", "")
-        if message:
-            return platform_message.MessageChain([platform_message.Plain(text=message)])
-
-        # 否则从 items 构建
-        lines = []
+    def _build_ai_text(self, data: Dict[str, Any]) -> str:
+        """AI 分析消息格式"""
+        lines = ["🤖 AI 分析报告", "━" * 20]
+        ai = data.get("ai_result", {})
         items = data.get("items", [])
-        subject = data.get("subject", "TrendRadar 日报")
+        if items:
+            lines.append(f"📰 {items[0].get('title', '')}")
+            if items[0].get("url"):
+                lines.append(f"🔗 {items[0]['url']}")
+        if ai.get("summary"):
+            lines.append(f"\n📝 {ai['summary']}")
+        if ai.get("keywords"):
+            lines.append(f"🏷️ {', '.join(ai['keywords'])}")
+        return "\n".join(lines)
 
-        lines.append(f"📰 {subject}")
-        lines.append("━" * 20)
-
-        for i, item in enumerate(items[:10], 1):
-            title = item.get("title", "")
-            source = item.get("source", "未知")
-            lines.append(f"{i}. {title}")
-            lines.append(f"   📍 {source}")
-
-        text = "\n".join(lines)
-        return platform_message.MessageChain([platform_message.Plain(text=text)])
+    def _build_daily_text(self, data: Dict[str, Any]) -> str:
+        """日报消息格式"""
+        if data.get("message"):
+            return data["message"]
+        lines = [f"📰 {data.get('subject', 'TrendRadar 日报')}", "━" * 20]
+        for i, item in enumerate(data.get("items", [])[:10], 1):
+            lines.append(f"{i}. {item.get('title', '')}")
+            if item.get("source"):
+                lines.append(f"   📍 {item['source']}")
+        return "\n".join(lines)
 
     async def terminate(self):
         """停止插件"""
         self._running = False
-
         if self._poll_task:
             self._poll_task.cancel()
             try:
                 await self._poll_task
             except asyncio.CancelledError:
                 pass
-
-        # 输出统计
-        logger.info("=" * 40)
-        logger.info("PushQueue 运行统计")
-        logger.info("=" * 40)
-        logger.info(f"处理消息: {self.stats['processed']}")
-        logger.info(f"发送成功: {self.stats['sent']}")
-        logger.info(f"发送失败: {self.stats['failed']}")
-        logger.info("=" * 40)
-
+        logger.info(f"PushQueue: 停止 (processed={self.stats['processed']}, sent={self.stats['sent']}, failed={self.stats['failed']})")
         await super().terminate()

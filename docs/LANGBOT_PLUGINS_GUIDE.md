@@ -1,7 +1,7 @@
 # LangBot 插件系统指南
 
 > TrendRadar 项目与 LangBot 集成的插件配置和使用文档
-> 最后更新: 2026-02-02
+> 最后更新: 2026-02-03
 
 ## 目录
 
@@ -29,6 +29,7 @@
 | **Text2LangbotMsgChain** | shinelinxx | 1.0.0 | EventListener | 文本转消息链 | 待安装 |
 | **RAGFlowRetriever** | langbot-team | 0.1.0 | KnowledgeRetriever | RAGFlow知识库检索 | 待安装 |
 | **trendradar** | TrendRadar | 1.0.0 | Command | 配置查看 | 已安装 |
+| **push_queue** | TrendRadar | 1.0.0 | EventListener | 飞书消息推送 | 已安装 |
 
 ---
 
@@ -211,6 +212,58 @@ RAGFlow 是开源的 RAG (检索增强生成) 引擎，基于深度文档理解�
 
 ## TrendRadar 自定义插件
 
+### push_queue (飞书消息推送)
+
+**功能**: 监听推送队列目录，自动发送消息到飞书群
+
+```
+组件类型: EventListener (1)
+状态: 已安装
+路径: TrendRadar__push_queue/components/event_listener/default.py
+```
+
+**工作原理**:
+1. 轮询监听 `.push_queue/` 目录中的 JSON 文件
+2. 解析消息内容，构建飞书消息格式
+3. 通过飞书 Open API 直接发送消息
+4. 处理完成后移动到 `.processed/` 目录
+
+**配置项** (通过 LangBot WebUI 设置):
+
+| 配置项 | 说明 | 示例 |
+|--------|------|------|
+| `target_id` | 飞书群 chat_id | `oc_xxx` |
+| `queue_dir` | 推送队列目录 | `/app/trendradar_config/.push_queue` |
+| `poll_interval` | 轮询间隔（秒） | `2` |
+| `feishu_app_id` | 飞书应用 App ID | `cli_xxx` |
+| `feishu_app_secret` | 飞书应用 App Secret | `xxx` |
+
+**支持的消息类型**:
+
+| 类型 | 说明 |
+|------|------|
+| `raw` | 原始新闻列表 |
+| `ai_analysis` | AI 分析报告 |
+| `daily_report` | 日报消息 |
+
+**推送文件格式示例**:
+```json
+{
+  "type": "raw",
+  "subject": "财经快讯",
+  "items": [
+    {
+      "title": "新闻标题",
+      "url": "https://...",
+      "matched_keywords": ["关键词"],
+      "published_at": "2026-02-03 10:00"
+    }
+  ]
+}
+```
+
+---
+
 ### trendradar (配置查看)
 
 **当前功能**:
@@ -349,6 +402,7 @@ pipeline:
 ### Phase 1: 基础集成 (当前)
 
 - [x] trendradar 命令插件
+- [x] push_queue 飞书推送插件 (直连 API)
 - [ ] 安装核心插件 (WebSearch, TaskTimer, Markdowm2ing_Pro)
 - [ ] 配置 Pipeline
 
@@ -377,4 +431,4 @@ pipeline:
 ---
 
 *文档维护: Claude Code*
-*版本: 1.0.0*
+*版本: 1.1.0*

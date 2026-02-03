@@ -4,15 +4,57 @@ metadata:
   author: TrendRadar
   name: push_queue
   repository: ''
-  version: 1.0.0
+  version: 1.1.0
   description:
-    en_US: 'TrendRadar push queue processor - monitors .push_queue and sends via LangBot'
-    zh_Hans: 'TrendRadar 推送队列处理器 - 监听队列目录，通过 LangBot 发送消息'
+    en_US: 'TrendRadar push queue processor - monitors .push_queue and sends to Feishu via direct API'
+    zh_Hans: 'TrendRadar 推送队列处理器 - 监听队列目录，通过飞书 API 直接发送消息'
   label:
     en_US: PushQueue
     zh_Hans: 推送队列
 spec:
-  config: []
+  config:
+    - name: target_id
+      type: string
+      label:
+        en_US: Feishu Chat ID
+        zh_Hans: 飞书群 chat_id
+      description:
+        en_US: Target chat ID for message delivery
+        zh_Hans: 消息发送目标群聊 ID
+    - name: queue_dir
+      type: string
+      label:
+        en_US: Queue Directory
+        zh_Hans: 推送队列目录
+      description:
+        en_US: Path to push queue directory
+        zh_Hans: 推送队列 JSON 文件目录路径
+      default: /app/trendradar_config/.push_queue
+    - name: poll_interval
+      type: number
+      label:
+        en_US: Poll Interval
+        zh_Hans: 轮询间隔
+      description:
+        en_US: Queue polling interval in seconds
+        zh_Hans: 队列轮询间隔（秒）
+      default: 2
+    - name: feishu_app_id
+      type: string
+      label:
+        en_US: Feishu App ID
+        zh_Hans: 飞书应用 App ID
+      description:
+        en_US: Feishu application App ID for API authentication
+        zh_Hans: 飞书开放平台应用的 App ID
+    - name: feishu_app_secret
+      type: string
+      label:
+        en_US: Feishu App Secret
+        zh_Hans: 飞书应用 App Secret
+      description:
+        en_US: Feishu application App Secret for API authentication
+        zh_Hans: 飞书开放平台应用的 App Secret
   components:
     EventListener:
       fromDirs:

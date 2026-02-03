@@ -77,8 +77,8 @@ sg docker -c "docker compose -f docker-compose-langbot.yml down"
 # 查看主服务日志
 sg docker -c "docker logs --tail 100 trendradar"
 
-# 查看飞书推送日志
-sg docker -c "docker logs --tail 100 feishu_push"
+# 查看 PushQueue 插件日志 (在 langbot_plugin_runtime 容器中)
+sg docker -c "docker logs --tail 100 langbot_plugin_runtime"
 
 # 清除爬虫缓存（触发重新推送）
 sg docker -c "docker exec trendradar rm -f /app/output/crawler/crawler.db"
@@ -213,8 +213,8 @@ sg docker -c "docker exec trendradar python3 scripts/run_crawler_daemon.py --onc
 ├────────────────────────────────────────────────────────────┤
 │                                                             │
 │  实时推送 (<1min):                                          │
-│  TrendRadar ──▶ Push Queue ──▶ feishu_push ──▶ 飞书群聊    │
-│  (daemon)       (.json 文件)    (2s 轮询)                   │
+│  TrendRadar ──▶ Push Queue ──▶ PushQueue 插件 ──▶ 飞书群聊 │
+│  (daemon)       (.json 文件)    (直连 Feishu API)           │
 │                                                             │
 │  定时日报 (每日):                                           │
 │  TaskTimer ──▶ trendradar_push.py ──▶ LangBot ──▶ 飞书群聊 │
@@ -230,6 +230,7 @@ sg docker -c "docker exec trendradar python3 scripts/run_crawler_daemon.py --onc
 | 插件 | 用途 | 状态 |
 |------|------|------|
 | trendradar | !tr 命令 (查看配置/状态) | ✅ 已部署 |
+| push_queue | 飞书消息推送 (直连 API) | ✅ 已部署 |
 | TaskTimer | 定时任务 (日报推送) | ✅ 已配置 |
 | WebSearch | AI 联网搜索 | 待启用 |
 | LinkAnaly | 链接解析 | 待集成 |
@@ -257,6 +258,33 @@ tasks:
     bot_uuid: 'xxx'               # LangBot Bot UUID
 ```
 
+### PushQueue 插件配置
+
+PushQueue 插件通过 LangBot WebUI 配置 (http://localhost:5300)，配置存储在 `langbot.db` 的 `plugin_settings` 表中。
+
+**配置项说明:**
+| 配置项 | 说明 | 示例 |
+|--------|------|------|
+| `target_id` | 飞书群 chat_id | `oc_xxx` |
+| `queue_dir` | 推送队列目录 | `/app/trendradar_config/.push_queue` |
+| `poll_interval` | 轮询间隔（秒） | `2` |
+| `feishu_app_id` | 飞书应用 App ID | `cli_xxx` |
+| `feishu_app_secret` | 飞书应用 App Secret | (从飞书开放平台获取) |
+
+**注意**: 插件运行在独立子进程中，无法读取容器环境变量，必须通过数据库配置。
+
+**手动更新配置** (需停止容器):
+```bash
+# 1. 停止容器
+sg docker -c "docker compose -f docker-compose-langbot.yml down"
+
+# 2. 更新数据库
+sqlite3 docker/langbot_data/langbot.db "UPDATE plugin_settings SET config = '{...}' WHERE plugin_name = 'push_queue';"
+
+# 3. 重启容器
+sg docker -c "docker compose -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime"
+```
+
 ### 部署 LangBot 集成脚本
 ```bash
 cd docker
@@ -276,6 +304,8 @@ cd docker
 | `trendradar/models/` | 统一数据模型目录 |
 | `trendradar/logging.py` | 日志配置模块 |
 | `trendradar/constants.py` | 项目常量定义 |
+| `docker/langbot_data/plugins/TrendRadar__push_queue/` | PushQueue 飞书推送插件 |
+| `docker/langbot_data/plugins/TrendRadar__trendradar/` | trendradar 命令插件 |
 
 ### 配置键名规范
 - loader.py 输出全部为**大写键名**（如 `FEISHU_WEBHOOK_URL`）
@@ -291,4 +321,4 @@ FEISHU_WEBHOOK_URL: "https://url1;https://url2;https://url3"
 
 ---
 
-*更新时间: 2026-02-02 22:45*
+*更新时间: 2026-02-03 14:30*
