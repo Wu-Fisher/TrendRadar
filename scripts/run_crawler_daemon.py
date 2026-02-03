@@ -45,137 +45,16 @@ from trendradar.core.loader import load_config
 from trendradar.core.config_manager import ConfigManager
 from trendradar.crawler.runner import CrawlerRunner
 from trendradar.crawler.custom import CrawlerNewsItem, FetchStatus
+from trendradar.notification.simple_senders import (
+    send_simple_feishu,
+    send_simple_dingtalk,
+    send_simple_wework,
+    send_simple_telegram,
+)
+from trendradar.constants import Timeouts
 
 # 初始化日志器
 logger = get_logger("daemon")
-
-
-# === 简单的 Webhook 发送函数 ===
-# 这些函数用于 daemon 模式的即时推送，不使用复杂的分批逻辑
-
-def _send_webhook_feishu(webhook_url: str, subject: str, content: str, verbose: bool = False) -> bool:
-    """发送飞书 webhook 消息（支持多账号）"""
-    urls = [url.strip() for url in webhook_url.split(";") if url.strip()]
-    success = False
-
-    for i, url in enumerate(urls[:3]):  # 最多3个账号
-        account_label = f"[{i+1}]" if len(urls) > 1 else ""
-        try:
-            payload = {
-                "msg_type": "text",
-                "content": {"text": f"{subject}\n\n{content}"}
-            }
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("StatusCode") == 0 or result.get("code") == 0:
-                    if verbose:
-                        logger.debug(f"飞书{account_label}推送成功")
-                    success = True
-                else:
-                    logger.warning(f"飞书{account_label}推送失败: {result.get('msg', '未知错误')}")
-            else:
-                logger.warning(f"飞书{account_label}推送失败: HTTP {response.status_code}")
-        except Exception as e:
-            logger.error(f"飞书{account_label}推送异常: {e}")
-
-    return success
-
-
-def _send_webhook_dingtalk(webhook_url: str, subject: str, content: str, verbose: bool = False) -> bool:
-    """发送钉钉 webhook 消息（支持多账号）"""
-    urls = [url.strip() for url in webhook_url.split(";") if url.strip()]
-    success = False
-
-    for i, url in enumerate(urls[:3]):
-        account_label = f"[{i+1}]" if len(urls) > 1 else ""
-        try:
-            payload = {
-                "msgtype": "markdown",
-                "markdown": {"title": subject, "text": f"## {subject}\n\n{content}"}
-            }
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("errcode") == 0:
-                    if verbose:
-                        logger.debug(f"钉钉{account_label}推送成功")
-                    success = True
-                else:
-                    logger.warning(f"钉钉{account_label}推送失败: {result.get('errmsg', '未知错误')}")
-            else:
-                logger.warning(f"钉钉{account_label}推送失败: HTTP {response.status_code}")
-        except Exception as e:
-            logger.error(f"钉钉{account_label}推送异常: {e}")
-
-    return success
-
-
-def _send_webhook_wework(webhook_url: str, subject: str, content: str, msg_type: str = "markdown", verbose: bool = False) -> bool:
-    """发送企业微信 webhook 消息（支持多账号）"""
-    urls = [url.strip() for url in webhook_url.split(";") if url.strip()]
-    success = False
-
-    for i, url in enumerate(urls[:3]):
-        account_label = f"[{i+1}]" if len(urls) > 1 else ""
-        try:
-            if msg_type.lower() == "text":
-                payload = {"msgtype": "text", "text": {"content": f"{subject}\n\n{content}"}}
-            else:
-                payload = {"msgtype": "markdown", "markdown": {"content": f"## {subject}\n\n{content}"}}
-
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("errcode") == 0:
-                    if verbose:
-                        logger.debug(f"企业微信{account_label}推送成功")
-                    success = True
-                else:
-                    logger.warning(f"企业微信{account_label}推送失败: {result.get('errmsg', '未知错误')}")
-            else:
-                logger.warning(f"企业微信{account_label}推送失败: HTTP {response.status_code}")
-        except Exception as e:
-            logger.error(f"企业微信{account_label}推送异常: {e}")
-
-    return success
-
-
-def _send_webhook_telegram(bot_token: str, chat_id: str, subject: str, content: str, verbose: bool = False) -> bool:
-    """发送 Telegram 消息（支持多账号）"""
-    tokens = [t.strip() for t in bot_token.split(";") if t.strip()]
-    chat_ids = [c.strip() for c in chat_id.split(";") if c.strip()]
-
-    if len(tokens) != len(chat_ids):
-        logger.error("Telegram 配置错误: bot_token 和 chat_id 数量不匹配")
-        return False
-
-    success = False
-    for i, (token, cid) in enumerate(zip(tokens[:3], chat_ids[:3])):
-        account_label = f"[{i+1}]" if len(tokens) > 1 else ""
-        try:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {
-                "chat_id": cid,
-                "text": f"<b>{subject}</b>\n\n{content}",
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True
-            }
-            response = requests.post(url, json=payload, timeout=30)
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("ok"):
-                    if verbose:
-                        logger.debug(f"Telegram{account_label}推送成功")
-                    success = True
-                else:
-                    logger.warning(f"Telegram{account_label}推送失败: {result.get('description', '未知错误')}")
-            else:
-                logger.warning(f"Telegram{account_label}推送失败: HTTP {response.status_code}")
-        except Exception as e:
-            logger.error(f"Telegram{account_label}推送异常: {e}")
-
-    return success
 
 
 class CrawlerDaemon:
@@ -373,27 +252,27 @@ class CrawlerDaemon:
             pushed = False
             notif = self.cfg.notification  # 类型安全的通知配置
 
-            # 飞书推送（使用新的 webhook 函数，支持多账号）
+            # 飞书推送
             if notif.feishu_webhook_url:
-                if _send_webhook_feishu(
+                if send_simple_feishu(
                     notif.feishu_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
-            # 钉钉推送（使用新的 webhook 函数，支持多账号）
+            # 钉钉推送
             if notif.dingtalk_webhook_url:
-                if _send_webhook_dingtalk(
+                if send_simple_dingtalk(
                     notif.dingtalk_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
-            # 企业微信推送（使用新的 webhook 函数，支持多账号）
+            # 企业微信推送
             if notif.wework_webhook_url:
-                if _send_webhook_wework(
+                if send_simple_wework(
                     notif.wework_webhook_url,
                     subject, text_content,
                     msg_type=notif.wework_msg_type,
@@ -401,9 +280,9 @@ class CrawlerDaemon:
                 ):
                     pushed = True
 
-            # Telegram 推送（使用新的 webhook 函数，支持多账号）
+            # Telegram 推送
             if notif.telegram_bot_token and notif.telegram_chat_id:
-                if _send_webhook_telegram(
+                if send_simple_telegram(
                     notif.telegram_bot_token,
                     notif.telegram_chat_id,
                     subject, text_content,
@@ -550,27 +429,27 @@ class CrawlerDaemon:
                 except Exception as e:
                     logger.error("邮件推送失败: %s", e)
 
-            # 飞书推送（使用新的 webhook 函数，支持多账号）
+            # 飞书推送
             if notif.feishu_webhook_url:
-                if _send_webhook_feishu(
+                if send_simple_feishu(
                     notif.feishu_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
-            # 钉钉推送（使用新的 webhook 函数，支持多账号）
+            # 钉钉推送
             if notif.dingtalk_webhook_url:
-                if _send_webhook_dingtalk(
+                if send_simple_dingtalk(
                     notif.dingtalk_webhook_url,
                     subject, text_content,
                     verbose=self.verbose
                 ):
                     pushed = True
 
-            # 企业微信推送（使用新的 webhook 函数，支持多账号）
+            # 企业微信推送
             if notif.wework_webhook_url:
-                if _send_webhook_wework(
+                if send_simple_wework(
                     notif.wework_webhook_url,
                     subject, text_content,
                     msg_type=notif.wework_msg_type,
@@ -578,9 +457,9 @@ class CrawlerDaemon:
                 ):
                     pushed = True
 
-            # Telegram 推送（使用新的 webhook 函数，支持多账号）
+            # Telegram 推送
             if notif.telegram_bot_token and notif.telegram_chat_id:
-                if _send_webhook_telegram(
+                if send_simple_telegram(
                     notif.telegram_bot_token,
                     notif.telegram_chat_id,
                     subject, text_content,
@@ -697,11 +576,11 @@ class CrawlerDaemon:
 
         # 发送
         if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30) as server:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=Timeouts.SMTP_CONNECT) as server:
                 server.login(from_email, password)
                 server.sendmail(from_email, to_email.split(","), msg.as_string())
         else:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=Timeouts.SMTP_CONNECT) as server:
                 server.starttls()
                 server.login(from_email, password)
                 server.sendmail(from_email, to_email.split(","), msg.as_string())

@@ -17,7 +17,10 @@ from typing import Dict, List, Optional, Callable, Any
 from collections import deque
 import queue
 
+from trendradar.logging import get_logger
 from trendradar.models import TaskStatus, QueueTask
+
+logger = get_logger(__name__)
 
 
 class AIQueueManager:
@@ -135,7 +138,7 @@ class AIQueueManager:
             )
             worker.start()
             self._workers.append(worker)
-        print(f"[AI Queue] 启动 {self.max_workers} 个工作线程")
+        logger.info("启动 %d 个工作线程", self.max_workers)
 
     def stop(self, wait: bool = True, timeout: float = 5.0):
         """停止工作线程"""
@@ -146,7 +149,7 @@ class AIQueueManager:
                 worker.join(timeout=timeout)
 
         self._workers.clear()
-        print("[AI Queue] 工作线程已停止")
+        logger.info("工作线程已停止")
 
     def _worker_loop(self, worker_id: int):
         """工作循环"""
@@ -159,7 +162,7 @@ class AIQueueManager:
                     continue
 
                 if not self._processor:
-                    print(f"[AI Worker {worker_id}] 未设置处理器")
+                    logger.warning("Worker %d: 未设置处理器", worker_id)
                     continue
 
                 # 更新状态
@@ -175,12 +178,11 @@ class AIQueueManager:
                     task.completed_at = datetime.now().isoformat()
                     self.stats["total_succeeded"] += 1
 
-                    # 触发回调
                     if self._result_callback:
                         try:
                             self._result_callback(task.id, result, True)
                         except Exception as e:
-                            print(f"[AI Worker {worker_id}] 回调错误: {e}")
+                            logger.error("Worker %d: 回调错误: %s", worker_id, e)
 
                 except Exception as e:
                     task.retry_count += 1
@@ -202,13 +204,13 @@ class AIQueueManager:
                             try:
                                 self._result_callback(task.id, None, False)
                             except Exception as cb_e:
-                                print(f"[AI Worker {worker_id}] 回调错误: {cb_e}")
+                                logger.error("Worker %d: 回调错误: %s", worker_id, cb_e)
 
                 self.stats["total_processed"] += 1
                 self._queue.task_done()
 
             except Exception as e:
-                print(f"[AI Worker {worker_id}] 异常: {e}")
+                logger.exception("Worker %d: 未预期异常", worker_id)
 
     def get_stats(self) -> Dict:
         """获取统计信息"""

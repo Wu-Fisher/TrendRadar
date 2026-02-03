@@ -29,8 +29,11 @@ from urllib.parse import urlparse
 
 import requests
 
+from trendradar.logging import get_logger
 from .batch import add_batch_headers, get_max_batch_header_size
 from .formatters import convert_markdown_to_mrkdwn, strip_markdown
+
+logger = get_logger(__name__)
 
 
 def _render_ai_analysis(ai_analysis: Any, channel: str) -> str:

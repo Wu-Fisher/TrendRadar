@@ -13,7 +13,8 @@
 - batch: 批次处理工具
 - renderer: 通知内容渲染
 - splitter: 消息分批拆分
-- senders: 消息发送器（各渠道发送函数）
+- senders: 消息发送器（各渠道发送函数，支持分批）
+- simple_senders: 简化发送器（单条消息快速发送，供 daemon 使用）
 - dispatcher: 多账号通知调度器
 """
 
@@ -48,6 +49,12 @@ from trendradar.notification.senders import (
     SMTP_CONFIGS,
 )
 from trendradar.notification.dispatcher import NotificationDispatcher
+from trendradar.notification.simple_senders import (
+    send_simple_feishu,
+    send_simple_dingtalk,
+    send_simple_wework,
+    send_simple_telegram,
+)
 
 __all__ = [
     # 推送记录管理
@@ -78,4 +85,9 @@ __all__ = [
     "SMTP_CONFIGS",
     # 通知调度器
     "NotificationDispatcher",
+    # 简化发送器（供 daemon 使用）
+    "send_simple_feishu",
+    "send_simple_dingtalk",
+    "send_simple_wework",
+    "send_simple_telegram",
 ]

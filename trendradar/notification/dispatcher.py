@@ -37,6 +37,9 @@ from .renderer import (
     render_rss_dingtalk_content,
     render_rss_markdown_content,
 )
+from trendradar.logging import get_logger
+
+logger = get_logger(__name__)
 
 # 类型检查时导入，运行时不导入（避免循环导入）
 if TYPE_CHECKING:
@@ -94,7 +97,7 @@ class NotificationDispatcher:
             return report_data, rss_items, rss_new_items
 
         import copy
-        print(f"[翻译] 开始翻译内容到 {self.translator.target_language}...")
+        logger.info("开始翻译内容到 %s...", self.translator.target_language)
 
         # 深拷贝避免修改原始数据
         report_data = copy.deepcopy(report_data)
@@ -130,19 +133,19 @@ class NotificationDispatcher:
                 title_locations.append(("rss_new_items", item_idx, None))
 
         if not titles_to_translate:
-            print("[翻译] 没有需要翻译的内容")
+            logger.debug("没有需要翻译的内容")
             return report_data, rss_items, rss_new_items
 
-        print(f"[翻译] 共 {len(titles_to_translate)} 条标题待翻译")
+        logger.info("共 %d 条标题待翻译", len(titles_to_translate))
 
         # 批量翻译
         result = self.translator.translate_batch(titles_to_translate)
 
         if result.success_count == 0:
-            print(f"[翻译] 翻译失败: {result.results[0].error if result.results else '未知错误'}")
+            logger.warning("翻译失败: %s", result.results[0].error if result.results else '未知错误')
             return report_data, rss_items, rss_new_items
 
-        print(f"[翻译] 翻译完成: {result.success_count}/{result.total_count} 成功")
+        logger.info("翻译完成: %d/%d 成功", result.success_count, result.total_count)
 
         # 回填翻译结果
         for i, (loc_type, idx1, idx2) in enumerate(title_locations):
@@ -516,8 +519,9 @@ class NotificationDispatcher:
 
         # 验证 token 和 topic 数量一致（如果配置了 token）
         if ntfy_tokens and len(ntfy_tokens) != len(ntfy_topics):
-            print(
-                f"❌ ntfy 配置错误：topic 数量({len(ntfy_topics)})与 token 数量({len(ntfy_tokens)})不一致，跳过 ntfy 推送"
+            logger.error(
+                "ntfy 配置错误：topic 数量(%d)与 token 数量(%d)不一致，跳过 ntfy 推送",
+                len(ntfy_topics), len(ntfy_tokens)
             )
             return False
 
@@ -745,7 +749,7 @@ class NotificationDispatcher:
             Dict[str, bool]: 每个渠道的发送结果
         """
         if not rss_items:
-            print("[RSS通知] 没有 RSS 内容，跳过通知")
+            logger.debug("没有 RSS 内容，跳过通知")
             return {}
 
         results = {}
@@ -855,10 +859,10 @@ class NotificationDispatcher:
                     resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ 飞书{account_label} RSS 通知发送成功")
+                logger.info("飞书%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ 飞书{account_label} RSS 通知发送失败: {e}")
+                logger.error("飞书%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -906,10 +910,10 @@ class NotificationDispatcher:
                     resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ 钉钉{account_label} RSS 通知发送成功")
+                logger.info("钉钉%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ 钉钉{account_label} RSS 通知发送失败: {e}")
+                logger.error("钉钉%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -942,7 +946,7 @@ class NotificationDispatcher:
             elif channel == "slack":
                 return self._send_rss_slack(content, proxy_url)
         except Exception as e:
-            print(f"❌ {channel} RSS 通知发送失败: {e}")
+            logger.error("%s RSS 通知发送失败: %s", channel, e)
             return False
 
         return False
@@ -975,10 +979,10 @@ class NotificationDispatcher:
                     resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ 企业微信{account_label} RSS 通知发送成功")
+                logger.info("企业微信%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ 企业微信{account_label} RSS 通知发送失败: {e}")
+                logger.error("企业微信%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -1019,10 +1023,10 @@ class NotificationDispatcher:
                     resp = requests.post(url, json=payload, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ Telegram{account_label} RSS 通知发送成功")
+                logger.info("Telegram%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ Telegram{account_label} RSS 通知发送失败: {e}")
+                logger.error("Telegram%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -1064,10 +1068,10 @@ class NotificationDispatcher:
                     )
                     resp.raise_for_status()
 
-                print(f"✅ ntfy{account_label} RSS 通知发送成功")
+                logger.info("ntfy%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ ntfy{account_label} RSS 通知发送失败: {e}")
+                logger.error("ntfy%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -1100,10 +1104,10 @@ class NotificationDispatcher:
                     resp = requests.get(url, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ Bark{account_label} RSS 通知发送成功")
+                logger.info("Bark%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ Bark{account_label} RSS 通知发送失败: {e}")
+                logger.error("Bark%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False
@@ -1143,10 +1147,10 @@ class NotificationDispatcher:
                     resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
                     resp.raise_for_status()
 
-                print(f"✅ Slack{account_label} RSS 通知发送成功")
+                logger.info("Slack%s RSS 通知发送成功", account_label)
                 results.append(True)
             except Exception as e:
-                print(f"❌ Slack{account_label} RSS 通知发送失败: {e}")
+                logger.error("Slack%s RSS 通知发送失败: %s", account_label, e)
                 results.append(False)
 
         return any(results) if results else False

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Callable, Any
 import json
 
+from trendradar.logging import get_logger
 from .custom import (
     CrawlerManager,
     THSCrawler,
@@ -29,6 +30,8 @@ from .custom import (
     load_frequency_words_for_crawler,
     format_filter_result,
 )
+
+logger = get_logger(__name__)
 
 
 class CrawlerRunner:
@@ -127,7 +130,7 @@ class CrawlerRunner:
                     "page_size": source.get("page_size", 100),
                 })
                 self.manager.register(crawler)
-                print(f"[爬虫] 注册 {source.get('name', source_type)} (API: {api_type})")
+                logger.info("注册 %s (API: %s)", source.get('name', source_type), api_type)
 
     def crawl_once(self) -> Dict[str, CrawlResult]:
         """执行一次爬取
@@ -144,10 +147,10 @@ class CrawlerRunner:
         # 处理每个结果
         for source_id, result in results.items():
             if result.status != FetchStatus.SUCCESS:
-                print(f"[爬虫] {source_id} 获取失败: {result.error_message}")
+                logger.warning("%s 获取失败: %s", source_id, result.error_message)
                 continue
 
-            print(f"[爬虫] {source_id} 获取成功: {result.total_count} 条, 新增 {result.new_count} 条")
+            logger.info("%s 获取成功: %d 条, 新增 %d 条", source_id, result.total_count, result.new_count)
 
             # 获取完整内容（新增条目）
             if self.content_enabled and result.new_count > 0:
@@ -158,7 +161,7 @@ class CrawlerRunner:
                 # 实际上获取所有未获取内容的条目
                 items_to_fetch = [item for item in result.items if not item.content_fetched]
                 if items_to_fetch:
-                    print(f"[爬虫] 开始获取 {len(items_to_fetch)} 条新闻的完整内容...")
+                    logger.info("开始获取 %d 条新闻的完整内容...", len(items_to_fetch))
                     self.manager.fetch_full_content(
                         source_id,
                         items_to_fetch,
@@ -205,17 +208,17 @@ class CrawlerRunner:
                 items, word_groups, filter_words, global_filters
             )
 
-            print(f"[爬虫] 过滤结果: 通过 {len(passed)} 条, 过滤 {len(filtered)} 条")
+            logger.info("过滤结果: 通过 %d 条, 过滤 %d 条", len(passed), len(filtered))
 
             # 触发回调
             for callback in self._on_filtered:
                 try:
                     callback(source_id, passed, filtered)
                 except Exception as e:
-                    print(f"[爬虫] 过滤回调错误: {e}")
+                    logger.error("过滤回调错误: %s", e)
 
         except Exception as e:
-            print(f"[爬虫] 过滤处理错误: {e}")
+            logger.error("过滤处理错误: %s", e)
 
     def start_polling(self, callback: Optional[Callable] = None) -> None:
         """开始轮询
@@ -235,7 +238,7 @@ class CrawlerRunner:
                     if callback:
                         callback(results)
                 except Exception as e:
-                    print(f"[爬虫] 轮询错误: {e}")
+                    logger.error("轮询错误: %s", e)
 
                 # 等待下一次
                 for _ in range(self.poll_interval):
@@ -245,14 +248,14 @@ class CrawlerRunner:
 
         self._poll_thread = threading.Thread(target=poll_task, daemon=True)
         self._poll_thread.start()
-        print(f"[爬虫] 开始轮询，间隔 {self.poll_interval} 秒")
+        logger.info("开始轮询，间隔 %d 秒", self.poll_interval)
 
     def stop_polling(self) -> None:
         """停止轮询"""
         self._running = False
         if self._poll_thread:
             self._poll_thread.join(timeout=5)
-        print("[爬虫] 停止轮询")
+        logger.info("停止轮询")
 
     def get_items_for_display(
         self,
@@ -398,7 +401,7 @@ class CrawlerRunner:
             max_days=self.max_days,
         )
         if deleted > 0:
-            print(f"[爬虫] 清理了 {deleted} 条旧数据")
+            logger.info("清理了 %d 条旧数据", deleted)
         self.manager.cleanup()
 
 
