@@ -4,7 +4,7 @@ metadata:
   author: TrendRadar
   name: push_queue
   repository: ''
-  version: 1.1.0
+  version: 1.2.0
   description:
     en_US: 'TrendRadar push queue processor - monitors .push_queue and sends to Feishu via direct API'
     zh_Hans: 'TrendRadar 推送队列处理器 - 监听队列目录，通过飞书 API 直接发送消息'
@@ -39,6 +39,15 @@ spec:
         en_US: Queue polling interval in seconds
         zh_Hans: 队列轮询间隔（秒）
       default: 2
+    - name: default_msg_format
+      type: string
+      label:
+        en_US: Default Message Format
+        zh_Hans: 默认消息格式
+      description:
+        en_US: 'Default message format: card (interactive card), post (rich text), text (plain text)'
+        zh_Hans: '默认消息格式: card (卡片), post (富文本), text (纯文本)'
+      default: card
     - name: feishu_app_id
       type: string
       label:

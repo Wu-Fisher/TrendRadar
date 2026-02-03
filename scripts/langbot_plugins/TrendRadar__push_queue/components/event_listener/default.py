@@ -122,6 +122,7 @@ class PushQueueEventListener(EventListener):
         self.queue_dir: Optional[Path] = None
         self.processed_dir: Optional[Path] = None
         self.poll_interval: int = 2
+        self.default_msg_format: str = "card"  # 默认消息格式
         self._running: bool = False
         self._poll_task: Optional[asyncio.Task] = None
         self.feishu_sender: Optional[FeishuDirectSender] = None
@@ -134,6 +135,7 @@ class PushQueueEventListener(EventListener):
         # 配置
         self.target_id = config.get("target_id")
         self.poll_interval = config.get("poll_interval", 2)
+        self.default_msg_format = config.get("default_msg_format", "card")  # 从配置读取
         queue_path = config.get("queue_dir", "/app/trendradar_config/.push_queue")
         self.queue_dir = Path(queue_path)
         self.processed_dir = self.queue_dir / ".processed"
@@ -192,8 +194,9 @@ class PushQueueEventListener(EventListener):
             if not self.feishu_sender or not self.target_id:
                 return
 
-            # 支持指定消息格式: text (默认), post (富文本), card (卡片)
-            msg_format = data.get("msg_format", "text")
+            # 支持指定消息格式: card (默认), post (富文本), text (纯文本)
+            # 优先使用消息中指定的格式，否则使用配置的默认格式
+            msg_format = data.get("msg_format", self.default_msg_format)
 
             if msg_format == "card":
                 card_content = self._build_card_content(data)
