@@ -204,8 +204,17 @@ def send_to_feishu(
                     log_prefix, i, len(batches), report_type, response.status_code
                 )
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
@@ -329,8 +338,17 @@ def send_to_dingtalk(
             else:
                 logger.error("%s第 %d/%d 批次发送失败 [%s]，状态码：%d", log_prefix, i, len(batches), report_type, response.status_code)
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
@@ -462,8 +480,17 @@ def send_to_wework(
             else:
                 logger.error("%s第 %d/%d 批次发送失败 [%s]，状态码：%d", log_prefix, i, len(batches), report_type, response.status_code)
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
@@ -586,8 +613,17 @@ def send_to_telegram(
             else:
                 logger.error("%s第 %d/%d 批次发送失败 [%s]，状态码：%d", log_prefix, i, len(batches), report_type, response.status_code)
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
@@ -925,7 +961,7 @@ def send_to_ntfy(
                             log_prefix, actual_batch_num, total_batches, report_type, response.status_code)
                 try:
                     logger.debug("错误详情：%s", response.text)
-                except:
+                except Exception:
                     pass
 
         except requests.exceptions.ConnectTimeout:
@@ -1095,7 +1131,7 @@ def send_to_bark(
                             log_prefix, actual_batch_num, total_batches, report_type, response.status_code)
                 try:
                     logger.debug("错误详情：%s", response.text)
-                except:
+                except Exception:
                     pass
 
         except requests.exceptions.ConnectTimeout:
@@ -1224,8 +1260,17 @@ def send_to_slack(
                 error_msg = response.text if response.text else f"状态码：{response.status_code}"
                 logger.error("%s第 %d/%d 批次发送失败 [%s]，错误：%s", log_prefix, i, len(batches), report_type, error_msg)
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
@@ -1360,8 +1405,17 @@ def send_to_generic_webhook(
                 logger.error("%s第 %d/%d 批次发送失败 [%s]，状态码：%d, 响应: %s",
                             log_prefix, i, len(batches), report_type, response.status_code, response.text)
                 return False
+        except requests.exceptions.ConnectTimeout:
+            logger.error("%s第 %d/%d 批次连接超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ReadTimeout:
+            logger.error("%s第 %d/%d 批次读取超时 [%s]", log_prefix, i, len(batches), report_type)
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error("%s第 %d/%d 批次连接错误 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            return False
         except Exception as e:
-            logger.error("%s第 %d/%d 批次发送出错 [%s]：%s", log_prefix, i, len(batches), report_type, e)
+            logger.error("%s第 %d/%d 批次发送异常 [%s]：%s", log_prefix, i, len(batches), report_type, e)
             return False
 
     logger.info("%s所有 %d 批次发送完成 [%s]", log_prefix, len(batches), report_type)
