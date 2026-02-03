@@ -26,6 +26,7 @@ services:
     volumes:
       - ./langbot_data/plugins:/app/data/plugins    # 插件目录
       - ../config:/app/trendradar_config:rw         # TrendRadar 配置 (读写)
+      - ../output:/app/trendradar_output:ro         # TrendRadar 输出 (日报脚本需要)
     ports:
       - "5401:5401"      # 插件运行时端口
     restart: unless-stopped

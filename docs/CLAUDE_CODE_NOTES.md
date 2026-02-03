@@ -35,18 +35,34 @@ sg docker -c "docker exec trendradar ls -la /app/scripts"
 
 ### 完整启动命令
 
+**推荐使用部署脚本** (`docker/deploy.sh`)：
+
 ```bash
 cd /home/wufisher/ws/dev/TrendRadar/docker
 
-# 完整启动（含 LangBot 插件系统）
-# 1. 启动 LangBot + 插件系统
+# 完整部署 (构建 + 启动所有服务)
+./deploy.sh full
+
+# 其他常用命令
+./deploy.sh status    # 查看状态
+./deploy.sh logs      # 查看日志
+./deploy.sh restart   # 重启服务
+./deploy.sh stop      # 停止服务
+```
+
+**手动命令** (Claude Code 需用 `sg docker -c`):
+
+```bash
+cd /home/wufisher/ws/dev/TrendRadar/docker
+
+# 构建镜像
+sg docker -c "docker compose -f docker-compose-build.yml build trendradar"
+
+# 启动 LangBot + 插件系统
 sg docker -c "docker compose -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime"
 
-# 2. 启动 TrendRadar + 飞书推送服务
+# 启动 TrendRadar + 飞书推送服务
 sg docker -c "docker compose -f docker-compose-build.yml --profile feishu up -d"
-
-# 只启动 TrendRadar（不含飞书推送）
-sg docker -c "docker compose -f docker-compose-build.yml up -d trendradar"
 
 # 停止所有服务
 sg docker -c "docker compose -f docker-compose-build.yml --profile feishu down"
@@ -188,7 +204,69 @@ sg docker -c "docker exec trendradar python3 scripts/run_crawler_daemon.py --onc
 
 ---
 
-## 6. 项目特定信息
+## 6. LangBot 插件集成
+
+### 架构概览
+```
+┌────────────────────────────────────────────────────────────┐
+│                     TrendRadar 推送架构                      │
+├────────────────────────────────────────────────────────────┤
+│                                                             │
+│  实时推送 (<1min):                                          │
+│  TrendRadar ──▶ Push Queue ──▶ feishu_push ──▶ 飞书群聊    │
+│  (daemon)       (.json 文件)    (2s 轮询)                   │
+│                                                             │
+│  定时日报 (每日):                                           │
+│  TaskTimer ──▶ trendradar_push.py ──▶ LangBot ──▶ 飞书群聊 │
+│  (APScheduler)   (读取 DB)                                  │
+│                                                             │
+│  命令交互:                                                  │
+│  用户 ──▶ !tr 命令 ──▶ LangBot Plugin ──▶ 配置/状态查看    │
+│                                                             │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 部署的插件
+| 插件 | 用途 | 状态 |
+|------|------|------|
+| trendradar | !tr 命令 (查看配置/状态) | ✅ 已部署 |
+| TaskTimer | 定时任务 (日报推送) | ✅ 已配置 |
+| WebSearch | AI 联网搜索 | 待启用 |
+| LinkAnaly | 链接解析 | 待集成 |
+
+### 命令说明
+```bash
+# 飞书群聊发送
+!tr           # 显示帮助
+!tr status    # 查看推送队列状态
+!tr keywords  # 查看关键词配置
+!tr prompt    # 查看 AI 分析提示词
+```
+
+### TaskTimer 日报配置
+tasks.yaml 位置: `docker/langbot_data/plugins/sheetung__TaskTimer/config/tasks.yaml`
+
+```yaml
+tasks:
+  - schedule: '0 9 * * *'         # 每天早上9点
+    script: 'trendradar_push.py'
+    enabled: true
+    description: 'TrendRadar 财经日报'
+    target_type: 'group'
+    target_id: 'oc_xxx'           # 飞书群聊ID
+    bot_uuid: 'xxx'               # LangBot Bot UUID
+```
+
+### 部署 LangBot 集成脚本
+```bash
+cd docker
+./deploy.sh deploy-scripts    # 部署 TaskTimer 脚本
+./deploy.sh restart           # 重启服务使配置生效
+```
+
+---
+
+## 7. 项目特定信息
 
 ### 关键文件
 | 文件 | 说明 |
@@ -213,4 +291,4 @@ FEISHU_WEBHOOK_URL: "https://url1;https://url2;https://url3"
 
 ---
 
-*更新时间: 2026-02-02*
+*更新时间: 2026-02-02 22:45*

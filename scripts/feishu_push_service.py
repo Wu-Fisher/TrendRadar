@@ -253,6 +253,29 @@ class FeishuPushService:
 
         return lines
 
+    def _format_daily_report(self, data: dict) -> list:
+        """格式化日报消息为富文本"""
+        lines = []
+        message = data.get("message", "")
+
+        # 直接使用预格式化的消息文本
+        if message:
+            for line in message.split("\n"):
+                lines.append([{"tag": "text", "text": line + "\n"}])
+        else:
+            # 如果没有预格式化消息，使用 items 构建
+            items = data.get("items", [])
+            lines.append([{"tag": "text", "text": "📰 TrendRadar 财经日报\n"}])
+            lines.append([{"tag": "text", "text": "━" * 20 + "\n"}])
+
+            for i, item in enumerate(items[:10], 1):
+                title = item.get("title", "")
+                source = item.get("source", "未知")
+                lines.append([{"tag": "text", "text": f"{i}. {title}\n"}])
+                lines.append([{"tag": "text", "text": f"   📍 {source}\n"}])
+
+        return lines
+
     def _process_file(self, file_path: Path) -> bool:
         """处理单个推送文件"""
         try:
@@ -264,6 +287,9 @@ class FeishuPushService:
             if push_type == "ai_analysis":
                 title = "AI 分析报告"
                 content_lines = self._format_ai_message(data)
+            elif push_type == "daily_report":
+                title = data.get("subject", "TrendRadar 日报")
+                content_lines = self._format_daily_report(data)
             else:
                 title = data.get("subject", "同花顺快讯")
                 content_lines = self._format_raw_message(data)

@@ -106,24 +106,33 @@
    # 编辑 .env 文件，配置 AI API Key 和推送渠道
    ```
 
-3. **构建并启动**
+3. **一键部署** (使用部署脚本)
    ```bash
    cd docker
-   docker compose -f docker-compose-build.yml build
-   docker compose -f docker-compose-build.yml --profile feishu up -d
+   ./deploy.sh full    # 构建镜像 + 启动所有服务
    ```
 
-   > 包含服务：`trendradar`（爬虫守护进程）+ `feishu_push`（飞书推送服务）
-   >
-   > feishu_push 通过 LangBot 凭证推送消息到飞书群，需要先配置 `FEISHU_CHAT_IDS`
+   > 部署脚本会自动启动以下服务：
+   > - `trendradar` - 爬虫守护进程 + AI 分析
+   > - `feishu_push` - 推送队列 → 飞书
+   > - `langbot` - 飞书机器人主服务
+   > - `langbot_plugin_runtime` - 插件系统 (`!tr` 命令)
 
-4. **查看日志**
+4. **常用命令**
    ```bash
-   # 爬虫日志
-   docker logs -f trendradar
+   ./deploy.sh status   # 查看服务状态
+   ./deploy.sh logs     # 查看所有日志
+   ./deploy.sh restart  # 重启所有服务
+   ./deploy.sh stop     # 停止所有服务
+   ./deploy.sh help     # 显示帮助
+   ```
 
-   # 飞书推送日志
-   docker logs -f feishu_push
+5. **飞书交互命令**
+   ```
+   !tr           # 显示帮助
+   !tr status    # 查看推送状态
+   !tr keywords  # 查看关键词配置
+   !tr prompt    # 查看 AI 提示词
    ```
 
 ### 关键配置
@@ -293,19 +302,16 @@ StockTrendRadar/
 ### 常用命令
 
 ```bash
-# 查看服务状态
-docker ps -a | grep -E "trendradar|langbot|feishu"
-
-# 查看实时日志
-docker logs -f trendradar      # 爬虫日志
-docker logs -f feishu_push     # 飞书推送日志
-
-# 重启服务
 cd docker
-docker compose -f docker-compose-build.yml --profile feishu restart
 
-# 停止服务
-docker compose -f docker-compose-build.yml --profile feishu down
+# 使用部署脚本 (推荐)
+./deploy.sh status              # 查看服务状态
+./deploy.sh logs                # 查看所有日志
+./deploy.sh logs trendradar     # 查看爬虫日志
+./deploy.sh logs plugin         # 查看插件日志
+./deploy.sh restart             # 重启所有服务
+./deploy.sh stop                # 停止所有服务
+./deploy.sh full                # 重新构建并启动
 
 # 手动执行一次 (调试)
 docker exec trendradar python scripts/run_crawler_daemon.py --once --verbose
