@@ -278,19 +278,72 @@ class PushQueueEventListener(EventListener):
         if push_type == "ai_analysis":
             ai = data.get("ai_result", {})
             items = data.get("items", [])
+
+            # 新闻标题和时间
             if items:
                 item = items[0]
                 md_lines.append(f"**📰 [{item.get('title', '')}]({item.get('url', '')})**")
-            if ai.get("summary"):
-                md_lines.append(f"\n📝 {ai['summary']}")
+                if item.get("published_at"):
+                    md_lines.append(f"🕐 {item['published_at']}")
+                md_lines.append("")  # 空行
+
+            # 完整显示 AI 分析内容
+            # 优先级: core_trends > summary
+            main_analysis = (
+                ai.get("core_trends") or
+                ai.get("summary") or ""
+            )
+            if main_analysis:
+                md_lines.append(f"**📝 分析报告**\n{main_analysis}")
+
+            # 舆论风向
+            if ai.get("sentiment_controversy"):
+                md_lines.append(f"\n**💬 舆论风向**\n{ai['sentiment_controversy']}")
+
+            # 异动信号
+            if ai.get("signals"):
+                md_lines.append(f"\n**⚡ 异动信号**\n{ai['signals']}")
+
+            # RSS 洞察
+            if ai.get("rss_insights"):
+                md_lines.append(f"\n**🔍 深度洞察**\n{ai['rss_insights']}")
+
+            # 策略建议
+            if ai.get("outlook_strategy"):
+                md_lines.append(f"\n**💡 策略建议**\n{ai['outlook_strategy']}")
+
+            # 关键词和实体
             if ai.get("keywords"):
-                md_lines.append(f"\n🏷️ `{', '.join(ai['keywords'])}`")
+                md_lines.append(f"\n🏷️ 关键词: `{', '.join(ai['keywords'])}`")
+            if ai.get("entities"):
+                md_lines.append(f"🏢 相关实体: `{', '.join(ai['entities'])}`")
+
+            # 情感和重要性
+            sentiment_map = {"positive": "📈 积极", "negative": "📉 消极", "neutral": "➖ 中性"}
+            if ai.get("sentiment"):
+                md_lines.append(f"情感倾向: {sentiment_map.get(ai['sentiment'], ai['sentiment'])}")
+            if ai.get("importance"):
+                md_lines.append(f"重要性: {'⭐' * ai['importance']}")
+
         else:
+            # 普通新闻列表
             for i, item in enumerate(data.get("items", [])[:10], 1):
+                line_parts = []
                 if item.get("url"):
-                    md_lines.append(f"{i}. [{item.get('title', '')}]({item['url']})")
+                    line_parts.append(f"{i}. [{item.get('title', '')}]({item['url']})")
                 else:
-                    md_lines.append(f"{i}. {item.get('title', '')}")
+                    line_parts.append(f"{i}. {item.get('title', '')}")
+
+                # 添加时间戳
+                if item.get("published_at"):
+                    line_parts.append(f"  🕐 {item['published_at']}")
+
+                # 添加关键词标签
+                keywords = item.get("matched_keywords", [])
+                if keywords:
+                    line_parts.append(f"  🏷️ {', '.join(keywords)}")
+
+                md_lines.append("\n".join(line_parts))
 
         return {
             "config": {"wide_screen_mode": True},
@@ -299,7 +352,7 @@ class PushQueueEventListener(EventListener):
                 "template": "blue"
             },
             "elements": [
-                {"tag": "markdown", "content": "\n".join(md_lines)},
+                {"tag": "markdown", "content": "\n\n".join(md_lines)},
                 {"tag": "hr"},
                 {"tag": "note", "elements": [
                     {"tag": "plain_text", "content": "📡 TrendRadar 财经监控"}

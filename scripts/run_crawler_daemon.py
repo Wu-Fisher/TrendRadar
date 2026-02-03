@@ -465,7 +465,16 @@ class CrawlerDaemon:
                     "summary": getattr(ai_result, 'summary', ''),
                     "keywords": getattr(ai_result, 'keywords', []),
                     "sentiment": getattr(ai_result, 'sentiment', ''),
-                    "importance": getattr(ai_result, 'importance', 0)
+                    "importance": getattr(ai_result, 'importance', 0),
+                    "category": getattr(ai_result, 'category', ''),
+                    "entities": getattr(ai_result, 'entities', []),
+                    "tags": getattr(ai_result, 'tags', []),
+                    # BatchAnalysisResult 字段 (如果有)
+                    "core_trends": getattr(ai_result, 'core_trends', ''),
+                    "sentiment_controversy": getattr(ai_result, 'sentiment_controversy', ''),
+                    "signals": getattr(ai_result, 'signals', ''),
+                    "rss_insights": getattr(ai_result, 'rss_insights', ''),
+                    "outlook_strategy": getattr(ai_result, 'outlook_strategy', ''),
                 }
 
             # 原子写入：先写临时文件，再重命名
