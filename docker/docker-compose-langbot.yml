@@ -20,12 +20,13 @@ services:
       - langbot_network
 
   # LangBot 插件运行时 (独立进程)
+  # 包含 PushQueue 插件 - 处理推送队列并发送到飞书
   langbot_plugin_runtime:
     image: rockchin/langbot:latest
     container_name: langbot_plugin_runtime
     volumes:
-      - ./langbot_data/plugins:/app/data/plugins    # 插件目录
-      - ../config:/app/trendradar_config:rw         # TrendRadar 配置 (读写)
+      - ./langbot_data/plugins:/app/data/plugins    # 插件目录 (含 PushQueue)
+      - ../config:/app/trendradar_config:rw         # TrendRadar 配置 (推送队列)
       - ../output:/app/trendradar_output:ro         # TrendRadar 输出 (日报脚本需要)
     ports:
       - "5401:5401"      # 插件运行时端口
@@ -36,14 +37,17 @@ services:
     networks:
       - langbot_network
 
-  # 飞书推送服务 (TrendRadar 推送队列 → 飞书)
+  # ==================== 已废弃 ====================
+  # 飞书推送服务 (已被 PushQueue 插件替代)
+  # 如需临时启用，使用: docker compose -f docker-compose-langbot.yml --profile deprecated up -d feishu_push
   feishu_push:
     image: python:3.11-slim
     container_name: feishu_push
+    profiles: ["deprecated"]  # 标记为废弃，默认不启动
     volumes:
-      - ../scripts:/app/scripts:ro                  # 推送服务脚本
-      - ../config:/app/config:rw                    # 推送队列目录
-      - ./langbot_data:/app/langbot_data:ro         # LangBot 数据 (读取凭证)
+      - ../scripts:/app/scripts:ro
+      - ../config:/app/config:rw
+      - ./langbot_data:/app/langbot_data:ro
     working_dir: /app
     command: ["bash", "-c", "pip install requests -q && python -u scripts/feishu_push_service.py --queue-dir /app/config/.push_queue --langbot-db /app/langbot_data/langbot.db --chat-ids $${FEISHU_CHAT_IDS:-oc_d29285f2dd1702ea24430464a43acc8c} --verbose"]
     restart: unless-stopped
@@ -52,6 +56,22 @@ services:
       - PYTHONUNBUFFERED=1
       - FEISHU_CHAT_IDS=${FEISHU_CHAT_IDS:-oc_d29285f2dd1702ea24430464a43acc8c}
       - FEISHU_OPEN_IDS=${FEISHU_OPEN_IDS:-}
+    networks:
+      - langbot_network
+
+  # TrendRadar 爬虫守护进程 (引用自 docker-compose-build.yml)
+  trendradar:
+    extends:
+      file: docker-compose-build.yml
+      service: trendradar
+    networks:
+      - langbot_network
+
+  # TrendRadar MCP 服务 (引用自 docker-compose-build.yml)
+  trendradar-mcp:
+    extends:
+      file: docker-compose-build.yml
+      service: trendradar-mcp
     networks:
       - langbot_network
 

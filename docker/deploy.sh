@@ -52,7 +52,59 @@ compose_cmd() {
     fi
 }
 
-# 部署 LangBot 插件集成脚本
+print_header() {
+    echo -e "${BLUE}════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  TrendRadar 部署脚本${NC}"
+    echo -e "${BLUE}════════════════════════════════════════${NC}"
+}
+
+print_step() {
+    echo -e "\n${GREEN}▶ $1${NC}"
+}
+
+print_warn() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+# 部署 PushQueue 插件
+deploy_pushqueue_plugin() {
+    print_step "部署 PushQueue 插件..."
+
+    local PLUGIN_SRC="../scripts/langbot_plugins/TrendRadar__push_queue"
+    local PLUGIN_DST="./langbot_data/plugins/TrendRadar__push_queue"
+
+    if [ ! -d "$PLUGIN_SRC" ]; then
+        print_warn "插件源码不存在: $PLUGIN_SRC"
+        return 0
+    fi
+
+    # 确保目标目录存在
+    mkdir -p "$(dirname "$PLUGIN_DST")"
+
+    # 复制插件文件 (保留现有配置)
+    if [ -d "$PLUGIN_DST" ]; then
+        # 更新代码文件，保留 config/ 和 data/ 目录
+        cp "$PLUGIN_SRC/manifest.yaml" "$PLUGIN_DST/"
+        cp "$PLUGIN_SRC/main.py" "$PLUGIN_DST/"
+        cp "$PLUGIN_SRC/requirements.txt" "$PLUGIN_DST/"
+        cp -r "$PLUGIN_SRC/components" "$PLUGIN_DST/"
+        print_success "已更新 PushQueue 插件代码"
+    else
+        # 首次部署
+        cp -r "$PLUGIN_SRC" "$PLUGIN_DST"
+        print_success "已部署 PushQueue 插件"
+    fi
+}
+
+# 部署 LangBot 插件集成脚本 (TaskTimer 日报等)
 deploy_langbot_scripts() {
     print_step "部署 LangBot 插件集成脚本..."
 
@@ -81,28 +133,6 @@ deploy_langbot_scripts() {
     fi
 }
 
-print_header() {
-    echo -e "${BLUE}════════════════════════════════════════${NC}"
-    echo -e "${BLUE}  TrendRadar 部署脚本${NC}"
-    echo -e "${BLUE}════════════════════════════════════════${NC}"
-}
-
-print_step() {
-    echo -e "\n${GREEN}▶ $1${NC}"
-}
-
-print_warn() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
-
 # 构建镜像
 do_build() {
     print_step "构建 TrendRadar 镜像..."
@@ -110,50 +140,31 @@ do_build() {
     print_success "镜像构建完成"
 }
 
-# 启动 LangBot 服务
-start_langbot() {
-    print_step "启动 LangBot + 插件运行时..."
-    compose_cmd -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime
-}
-
-# 启动 TrendRadar 服务
-start_trendradar() {
-    print_step "启动 TrendRadar + 飞书推送..."
-    compose_cmd -f docker-compose-build.yml --profile feishu up -d
-}
-
-# 启动所有服务
+# 启动所有服务 (使用统一的 docker-compose-langbot.yml)
 do_start() {
-    start_langbot
-    start_trendradar
+    print_step "启动 LangBot + TrendRadar 服务..."
+    compose_cmd -f docker-compose-langbot.yml up -d langbot langbot_plugin_runtime trendradar trendradar-mcp
 
     print_step "等待服务启动..."
     sleep 5
 
     do_status
     print_success "所有服务已启动"
+    echo ""
+    echo -e "${YELLOW}推送架构: daemon → .push_queue/ → PushQueue插件 → LangBot → 飞书${NC}"
 }
 
 # 停止所有服务
 do_stop() {
-    print_step "停止 TrendRadar + 飞书推送..."
-    compose_cmd -f docker-compose-build.yml --profile feishu down || true
-
-    print_step "停止 LangBot..."
+    print_step "停止所有服务..."
     compose_cmd -f docker-compose-langbot.yml down || true
-
     print_success "所有服务已停止"
 }
 
 # 重启所有服务
 do_restart() {
     print_step "重启所有服务..."
-
-    # 重启 LangBot
-    compose_cmd -f docker-compose-langbot.yml restart langbot langbot_plugin_runtime || true
-
-    # 重启 TrendRadar
-    compose_cmd -f docker-compose-build.yml --profile feishu restart || true
+    compose_cmd -f docker-compose-langbot.yml restart langbot langbot_plugin_runtime trendradar trendradar-mcp || true
 
     sleep 5
     do_status
@@ -164,7 +175,7 @@ do_restart() {
 do_status() {
     print_step "服务状态:"
     echo ""
-    docker_cmd ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAMES|trendradar|langbot|feishu" || echo "无运行中的服务"
+    docker_cmd ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAMES|trendradar|langbot" || echo "无运行中的服务"
 }
 
 # 查看日志
@@ -176,9 +187,9 @@ do_logs() {
             print_step "TrendRadar 日志:"
             docker_cmd logs --tail 50 trendradar
             ;;
-        feishu|push)
-            print_step "飞书推送日志:"
-            docker_cmd logs --tail 50 feishu_push
+        push|queue)
+            print_step "PushQueue 插件日志 (在 plugin runtime 中):"
+            docker_cmd logs --tail 50 langbot_plugin_runtime 2>&1 | grep -i "pushqueue\|push_queue\|发送" || echo "(无 PushQueue 相关日志)"
             ;;
         langbot|lb)
             print_step "LangBot 日志:"
@@ -192,9 +203,6 @@ do_logs() {
             print_step "TrendRadar 日志 (最近 20 行):"
             docker_cmd logs --tail 20 trendradar 2>/dev/null || echo "(容器未运行)"
             echo ""
-            print_step "飞书推送日志 (最近 20 行):"
-            docker_cmd logs --tail 20 feishu_push 2>/dev/null || echo "(容器未运行)"
-            echo ""
             print_step "插件运行时日志 (最近 20 行):"
             docker_cmd logs --tail 20 langbot_plugin_runtime 2>/dev/null || echo "(容器未运行)"
             ;;
@@ -205,8 +213,9 @@ do_logs() {
 do_full() {
     print_header
     do_build
-    deploy_langbot_scripts
+    deploy_pushqueue_plugin
     do_start
+    deploy_langbot_scripts
     echo ""
     print_success "完整部署完成!"
     echo ""
@@ -216,11 +225,12 @@ do_full() {
     echo "  ./deploy.sh status  - 查看状态"
 }
 
-# 部署 LangBot 集成
+# 部署所有脚本
 do_deploy_scripts() {
     print_header
+    deploy_pushqueue_plugin
     deploy_langbot_scripts
-    print_success "LangBot 集成脚本部署完成"
+    print_success "所有脚本部署完成"
 }
 
 # 显示帮助
@@ -236,23 +246,27 @@ TrendRadar 部署脚本
   stop               停止所有服务
   restart            重启所有服务
   status             查看服务状态
-  logs [服务名]      查看日志 (trendradar/feishu/langbot/plugin/all)
-  deploy-scripts     部署 LangBot 集成脚本 (TaskTimer 日报等)
-  full               完整部署 (构建 + 部署脚本 + 启动)
+  logs [服务名]      查看日志 (trendradar/push/langbot/plugin/all)
+  deploy-scripts     部署 LangBot 插件 (PushQueue + TaskTimer 脚本)
+  full               完整部署 (构建 + 部署插件 + 启动)
   help               显示此帮助信息
 
 示例:
   ./deploy.sh full              # 首次部署或代码更新后
   ./deploy.sh restart           # 重启所有服务
   ./deploy.sh logs trendradar   # 查看爬虫日志
-  ./deploy.sh logs plugin       # 查看插件日志
-  ./deploy.sh deploy-scripts    # 仅部署 LangBot 集成脚本
+  ./deploy.sh logs push         # 查看 PushQueue 推送日志
+  ./deploy.sh logs plugin       # 查看插件运行时日志
+  ./deploy.sh deploy-scripts    # 仅部署 LangBot 插件
 
 服务说明:
   trendradar              爬虫守护进程 + AI 分析
-  feishu_push             推送队列 → 飞书 (实时)
   langbot                 飞书机器人主服务
-  langbot_plugin_runtime  插件系统 (!tr 命令)
+  langbot_plugin_runtime  插件系统 (PushQueue 推送 + !tr 命令)
+  trendradar-mcp          MCP 服务 (可选)
+
+推送架构:
+  daemon → .push_queue/ → PushQueue 插件 → LangBot → 飞书
 
 EOF
 }
