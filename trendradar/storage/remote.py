@@ -17,6 +17,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from trendradar.logging import get_logger
+
+logger = get_logger(__name__)
+
 try:
     import boto3
     from botocore.config import Config as BotoConfig
@@ -118,7 +122,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         self._downloaded_files: List[Path] = []
         self._db_connections: Dict[str, sqlite3.Connection] = {}
 
-        print(f"[远程存储] 初始化完成，存储桶: {bucket_name}，签名版本: {signature_version}")
+        logger.info("初始化完成，存储桶: %s，签名版本: %s", bucket_name, signature_version)
 
     @property
     def backend_name(self) -> str:
@@ -193,10 +197,10 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
             if error_code in ("404", "NoSuchKey", "Not Found"):
                 return False
             # 其他错误（如权限问题）也视为不存在，但打印警告
-            print(f"[远程存储] 检查对象存在性失败 ({r2_key}): {e}")
+            logger.warning("检查对象存在性失败 (%s): %s", r2_key, e)
             return False
         except Exception as e:
-            print(f"[远程存储] 检查对象存在性异常 ({r2_key}): {e}")
+            logger.warning("检查对象存在性异常 (%s): %s", r2_key, e)
             return False
 
     def _download_sqlite(self, date: Optional[str] = None, db_type: str = "news") -> Optional[Path]:
@@ -221,7 +225,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
 
         # 先检查文件是否存在
         if not self._check_object_exists(r2_key):
-            print(f"[远程存储] 文件不存在，将创建新数据库: {r2_key}")
+            logger.info("文件不存在，将创建新数据库: %s", r2_key)
             return None
 
         try:
@@ -232,19 +236,19 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
                 for chunk in response['Body'].iter_chunks(chunk_size=1024*1024):
                     f.write(chunk)
             self._downloaded_files.append(local_path)
-            print(f"[远程存储] 已下载: {r2_key} -> {local_path}")
+            logger.info("已下载: %s -> %s", r2_key, local_path)
             return local_path
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             # S3 兼容存储可能返回不同的错误码
             if error_code in ("404", "NoSuchKey", "Not Found"):
-                print(f"[远程存储] 文件不存在，将创建新数据库: {r2_key}")
+                logger.info("文件不存在，将创建新数据库: %s", r2_key)
                 return None
             else:
-                print(f"[远程存储] 下载失败 (错误码: {error_code}): {e}")
+                logger.error("下载失败 (错误码: %s): %s", error_code, e)
                 raise
         except Exception as e:
-            print(f"[远程存储] 下载异常: {e}")
+            logger.error("下载异常: %s", e)
             raise
 
     def _upload_sqlite(self, date: Optional[str] = None, db_type: str = "news") -> bool:
@@ -262,13 +266,13 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         r2_key = self._get_remote_db_key(date, db_type)
 
         if not local_path.exists():
-            print(f"[远程存储] 本地文件不存在，无法上传: {local_path}")
+            logger.warning("本地文件不存在，无法上传: %s", local_path)
             return False
 
         try:
             # 获取本地文件大小
             local_size = local_path.stat().st_size
-            print(f"[远程存储] 准备上传: {local_path} ({local_size} bytes) -> {r2_key}")
+            logger.info("准备上传: %s (%d bytes) -> %s", local_path, local_size, r2_key)
 
             # 读取文件内容为 bytes 后上传
             # 避免传入文件对象时 requests 库使用 chunked transfer encoding
@@ -284,18 +288,18 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
                 ContentLength=local_size,
                 ContentType='application/x-sqlite3',
             )
-            print(f"[远程存储] 已上传: {local_path} -> {r2_key}")
+            logger.info("已上传: %s -> %s", local_path, r2_key)
 
             # 验证上传成功
             if self._check_object_exists(r2_key):
-                print(f"[远程存储] 上传验证成功: {r2_key}")
+                logger.info("上传验证成功: %s", r2_key)
                 return True
             else:
-                print(f"[远程存储] 上传验证失败: 文件未在远程存储中找到")
+                logger.error("上传验证失败: 文件未在远程存储中找到")
                 return False
 
         except Exception as e:
-            print(f"[远程存储] 上传失败: {e}")
+            logger.error("上传失败: %s", e)
             return False
 
     def _get_connection(self, date: Optional[str] = None, db_type: str = "news") -> sqlite3.Connection:
@@ -344,7 +348,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         row = cursor.fetchone()
         existing_count = row[0] if row else 0
         if existing_count > 0:
-            print(f"[远程存储] 已有 {existing_count} 条历史记录，将合并新数据")
+            logger.info("已有 %d 条历史记录，将合并新数据", existing_count)
 
         # 使用 mixin 的实现保存数据
         success, new_count, updated_count, title_changed_count, off_list_count = \
@@ -367,14 +371,14 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         if off_list_count > 0:
             log_parts.append(f"脱榜 {off_list_count} 条")
         log_parts.append(f"(去重后总计: {final_count} 条)")
-        print("，".join(log_parts))
+        logger.info("，".join(log_parts).replace("[远程存储] ", ""))
 
         # 上传到远程存储
         if self._upload_sqlite(data.date):
-            print(f"[远程存储] 数据已同步到远程存储")
+            logger.info("数据已同步到远程存储")
             return True
         else:
-            print(f"[远程存储] 上传远程存储失败")
+            logger.error("上传远程存储失败")
             return False
 
     def get_today_all_data(self, date: Optional[str] = None) -> Optional[NewsData]:
@@ -403,14 +407,14 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
 
         if success:
             now_str = self._get_configured_time().strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[远程存储] 推送记录已保存: {report_type} at {now_str}")
+            logger.info("推送记录已保存: %s at %s", report_type, now_str)
 
             # 上传到远程存储 确保记录持久化
             if self._upload_sqlite(date):
-                print(f"[远程存储] 推送记录已同步到远程存储")
+                logger.info("推送记录已同步到远程存储")
                 return True
             else:
-                print(f"[远程存储] 推送记录同步到远程存储失败")
+                logger.error("推送记录同步到远程存储失败")
                 return False
 
         return False
@@ -425,14 +429,14 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
 
         if success:
             now_str = self._get_configured_time().strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[远程存储] AI 分析记录已保存: {analysis_mode} at {now_str}")
+            logger.info("AI 分析记录已保存: %s at %s", analysis_mode, now_str)
 
             # 上传到远程存储 确保记录持久化
             if self._upload_sqlite(date):
-                print(f"[远程存储] AI 分析记录已同步到远程存储")
+                logger.info("AI 分析记录已同步到远程存储")
                 return True
             else:
-                print(f"[远程存储] AI 分析记录同步到远程存储失败")
+                logger.error("AI 分析记录同步到远程存储失败")
                 return False
 
         return False
@@ -456,14 +460,14 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         log_parts = [f"[远程存储] RSS 处理完成：新增 {new_count} 条"]
         if updated_count > 0:
             log_parts.append(f"更新 {updated_count} 条")
-        print("，".join(log_parts))
+        logger.info("，".join(log_parts).replace("[远程存储] ", ""))
 
         # 上传到远程存储
         if self._upload_sqlite(data.date, db_type="rss"):
-            print(f"[远程存储] RSS 数据已同步到远程存储")
+            logger.info("RSS 数据已同步到远程存储")
             return True
         else:
-            print(f"[远程存储] RSS 上传远程存储失败")
+            logger.error("RSS 上传远程存储失败")
             return False
 
     def get_rss_data(self, date: Optional[str] = None) -> Optional[RSSData]:
@@ -521,11 +525,11 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
                     for failed_id in data.failed_ids:
                         f.write(f"{failed_id}\n")
 
-            print(f"[远程存储] TXT 快照已保存: {file_path}")
+            logger.info("TXT 快照已保存: %s", file_path)
             return str(file_path)
 
         except Exception as e:
-            print(f"[远程存储] 保存 TXT 快照失败: {e}")
+            logger.error("保存 TXT 快照失败: %s", e)
             return None
 
     def save_html_report(self, html_content: str, filename: str, is_summary: bool = False) -> Optional[str]:
@@ -543,11 +547,11 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_content)
 
-            print(f"[远程存储] HTML 报告已保存: {file_path}")
+            logger.info("HTML 报告已保存: %s", file_path)
             return str(file_path)
 
         except Exception as e:
-            print(f"[远程存储] 保存 HTML 报告失败: {e}")
+            logger.error("保存 HTML 报告失败: %s", e)
             return None
 
     # ========================================
@@ -565,9 +569,9 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         for db_path, conn in list(db_connections.items()):
             try:
                 conn.close()
-                print(f"[远程存储] 关闭数据库连接: {db_path}")
+                logger.info("关闭数据库连接: %s", db_path)
             except Exception as e:
-                print(f"[远程存储] 关闭连接失败 {db_path}: {e}")
+                logger.error("关闭连接失败 %s: %s", db_path, e)
 
         if db_connections:
             db_connections.clear()
@@ -578,11 +582,11 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
             try:
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir)
-                    print(f"[远程存储] 临时目录已清理: {temp_dir}")
+                    logger.info("临时目录已清理: %s", temp_dir)
             except Exception as e:
                 # 忽略 Python 关闭时的错误
                 if sys.meta_path is not None:
-                    print(f"[远程存储] 清理临时目录失败: {e}")
+                    logger.error("清理临时目录失败: %s", e)
 
         downloaded_files = getattr(self, "_downloaded_files", None)
         if downloaded_files:
@@ -650,20 +654,20 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
                             Bucket=self.bucket_name,
                             Delete={'Objects': batch}
                         )
-                        print(f"[远程存储] 删除 {len(batch)} 个对象")
+                        logger.info("删除 %d 个对象", len(batch))
                     except Exception as e:
-                        print(f"[远程存储] 批量删除失败: {e}")
+                        logger.error("批量删除失败: %s", e)
 
                 deleted_count = len(deleted_dates)
                 for date_str in sorted(deleted_dates):
-                    print(f"[远程存储] 清理过期数据: news/{date_str}.db")
+                    logger.info("清理过期数据: news/%s.db", date_str)
 
-                print(f"[远程存储] 共清理 {deleted_count} 个过期日期数据库文件")
+                logger.info("共清理 %d 个过期日期数据库文件", deleted_count)
 
             return deleted_count
 
         except Exception as e:
-            print(f"[远程存储] 清理过期数据失败: {e}")
+            logger.error("清理过期数据失败: %s", e)
             return deleted_count
 
     def __del__(self):
@@ -701,7 +705,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
         pulled_count = 0
         now = self._get_configured_time()
 
-        print(f"[远程存储] 开始拉取最近 {days} 天的数据...")
+        logger.info("开始拉取最近 %d 天的数据...", days)
 
         for i in range(days):
             date = now - timedelta(days=i)
@@ -713,7 +717,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
 
             # 如果本地已存在，跳过
             if local_db_path.exists():
-                print(f"[远程存储] 跳过（本地已存在）: {date_str}")
+                logger.info("跳过（本地已存在）: %s", date_str)
                 continue
 
             # 远程对象键
@@ -721,7 +725,7 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
 
             # 检查远程是否存在
             if not self._check_object_exists(remote_key):
-                print(f"[远程存储] 跳过（远程不存在）: {date_str}")
+                logger.info("跳过（远程不存在）: %s", date_str)
                 continue
 
             # 下载（使用 get_object + iter_chunks 处理 chunked encoding）
@@ -731,12 +735,12 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
                 with open(local_db_path, 'wb') as f:
                     for chunk in response['Body'].iter_chunks(chunk_size=1024*1024):
                         f.write(chunk)
-                print(f"[远程存储] 已拉取: {remote_key} -> {local_db_path}")
+                logger.info("已拉取: %s -> %s", remote_key, local_db_path)
                 pulled_count += 1
             except Exception as e:
-                print(f"[远程存储] 拉取失败 ({date_str}): {e}")
+                logger.error("拉取失败 (%s): %s", date_str, e)
 
-        print(f"[远程存储] 拉取完成，共下载 {pulled_count} 个数据库文件")
+        logger.info("拉取完成，共下载 %d 个数据库文件", pulled_count)
         return pulled_count
 
     def list_remote_dates(self) -> List[str]:
@@ -766,5 +770,5 @@ class RemoteStorageBackend(SQLiteStorageMixin, StorageBackend):
             return sorted(dates, reverse=True)
 
         except Exception as e:
-            print(f"[远程存储] 列出远程日期失败: {e}")
+            logger.error("列出远程日期失败: %s", e)
             return []
