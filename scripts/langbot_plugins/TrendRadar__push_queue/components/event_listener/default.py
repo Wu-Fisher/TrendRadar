@@ -70,6 +70,48 @@ class FeishuDirectSender:
                 return data
             raise Exception(f"飞书消息发送失败: {data}")
 
+    async def send_post_message(self, chat_id: str, title: str, content_elements: list) -> Dict[str, Any]:
+        """发送富文本消息 (post 格式，与 LangBot 相同)"""
+        token = await self._get_token()
+        post_content = {
+            "zh_cn": {
+                "title": title,
+                "content": content_elements  # [[{"tag": "text", "text": "..."}, {"tag": "a", "href": "...", "text": "链接"}]]
+            }
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "receive_id": chat_id,
+                    "msg_type": "post",
+                    "content": json.dumps(post_content)
+                }
+            )
+            data = resp.json()
+            if data.get("code") == 0:
+                return data
+            raise Exception(f"飞书富文本消息发送失败: {data}")
+
+    async def send_card_message(self, chat_id: str, card_content: dict) -> Dict[str, Any]:
+        """发送卡片消息 (interactive 格式)"""
+        token = await self._get_token()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "receive_id": chat_id,
+                    "msg_type": "interactive",
+                    "content": json.dumps(card_content)
+                }
+            )
+            data = resp.json()
+            if data.get("code") == 0:
+                return data
+            raise Exception(f"飞书卡片消息发送失败: {data}")
+
 
 class PushQueueEventListener(EventListener):
     """推送队列监听器 - 轮询目录并发送消息到飞书"""
@@ -147,10 +189,26 @@ class PushQueueEventListener(EventListener):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            message_text = self._build_message_text(data)
-            if message_text and self.feishu_sender and self.target_id:
-                await self.feishu_sender.send_message(self.target_id, message_text)
-                self.stats["sent"] += 1
+            if not self.feishu_sender or not self.target_id:
+                return
+
+            # 支持指定消息格式: text (默认), post (富文本), card (卡片)
+            msg_format = data.get("msg_format", "text")
+
+            if msg_format == "card":
+                card_content = self._build_card_content(data)
+                await self.feishu_sender.send_card_message(self.target_id, card_content)
+                logger.info(f"PushQueue: 发送卡片消息成功")
+            elif msg_format == "post":
+                title, elements = self._build_post_content(data)
+                await self.feishu_sender.send_post_message(self.target_id, title, elements)
+                logger.info(f"PushQueue: 发送富文本消息成功")
+            else:
+                message_text = self._build_message_text(data)
+                if message_text:
+                    await self.feishu_sender.send_message(self.target_id, message_text)
+
+            self.stats["sent"] += 1
 
             # 移动到已处理目录
             (self.processed_dir / file_path.name).unlink(missing_ok=True)
@@ -173,6 +231,78 @@ class PushQueueEventListener(EventListener):
         elif push_type == "daily_report":
             return self._build_daily_text(data)
         return self._build_raw_text(data)
+
+    def _build_post_content(self, data: Dict[str, Any]) -> tuple:
+        """构建富文本 (post) 消息内容，返回 (title, content_elements)"""
+        push_type = data.get("type", "raw")
+        title = data.get("subject", "TrendRadar 推送")
+        elements = []
+
+        if push_type == "ai_analysis":
+            ai = data.get("ai_result", {})
+            items = data.get("items", [])
+            if items:
+                item = items[0]
+                elements.append([
+                    {"tag": "text", "text": "📰 "},
+                    {"tag": "a", "href": item.get("url", ""), "text": item.get("title", "新闻标题")}
+                ])
+            if ai.get("summary"):
+                elements.append([{"tag": "text", "text": f"\n📝 {ai['summary']}"}])
+            if ai.get("keywords"):
+                elements.append([{"tag": "text", "text": f"\n🏷️ {', '.join(ai['keywords'])}"}])
+        else:
+            for i, item in enumerate(data.get("items", [])[:10], 1):
+                line = [{"tag": "text", "text": f"{i}. "}]
+                if item.get("url"):
+                    line.append({"tag": "a", "href": item["url"], "text": item.get("title", "")})
+                else:
+                    line.append({"tag": "text", "text": item.get("title", "")})
+                keywords = item.get("matched_keywords", [])
+                if keywords:
+                    line.append({"tag": "text", "text": f" 【{', '.join(keywords)}】"})
+                elements.append(line)
+
+        return title, elements
+
+    def _build_card_content(self, data: Dict[str, Any]) -> dict:
+        """构建卡片消息内容"""
+        push_type = data.get("type", "raw")
+        title = data.get("subject", "TrendRadar 推送")
+
+        # 构建 Markdown 内容
+        md_lines = []
+        if push_type == "ai_analysis":
+            ai = data.get("ai_result", {})
+            items = data.get("items", [])
+            if items:
+                item = items[0]
+                md_lines.append(f"**📰 [{item.get('title', '')}]({item.get('url', '')})**")
+            if ai.get("summary"):
+                md_lines.append(f"\n📝 {ai['summary']}")
+            if ai.get("keywords"):
+                md_lines.append(f"\n🏷️ `{', '.join(ai['keywords'])}`")
+        else:
+            for i, item in enumerate(data.get("items", [])[:10], 1):
+                if item.get("url"):
+                    md_lines.append(f"{i}. [{item.get('title', '')}]({item['url']})")
+                else:
+                    md_lines.append(f"{i}. {item.get('title', '')}")
+
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": "blue"
+            },
+            "elements": [
+                {"tag": "markdown", "content": "\n".join(md_lines)},
+                {"tag": "hr"},
+                {"tag": "note", "elements": [
+                    {"tag": "plain_text", "content": "📡 TrendRadar 财经监控"}
+                ]}
+            ]
+        }
 
     def _build_raw_text(self, data: Dict[str, Any]) -> str:
         """原始消息格式"""
