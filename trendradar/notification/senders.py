@@ -165,8 +165,9 @@ def send_to_feishu(
     # 逐批发送
     for i, batch_content in enumerate(batches, 1):
         content_size = len(batch_content.encode("utf-8"))
-        print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+        logger.debug(
+            "发送%s第 %d/%d 批次，大小：%d 字节 [%s]",
+            log_prefix, i, len(batches), content_size, report_type
         )
 
         # 飞书 webhook 只显示 content.text，所有信息都整合到 text 中
@@ -191,13 +192,15 @@ def send_to_feishu(
                         time.sleep(batch_interval)
                 else:
                     error_msg = result.get("msg") or result.get("StatusMessage", "未知错误")
-                    print(
-                        f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，错误：{error_msg}"
+                    logger.error(
+                        "%s第 %d/%d 批次发送失败 [%s]，错误：%s",
+                        log_prefix, i, len(batches), report_type, error_msg
                     )
                     return False
             else:
-                print(
-                    f"{log_prefix}第 {i}/{len(batches)} 批次发送失败 [{report_type}]，状态码：{response.status_code}"
+                logger.error(
+                    "%s第 %d/%d 批次发送失败 [%s]，状态码：%d",
+                    log_prefix, i, len(batches), report_type, response.status_code
                 )
                 return False
         except Exception as e:
@@ -295,8 +298,9 @@ def send_to_dingtalk(
     # 逐批发送
     for i, batch_content in enumerate(batches, 1):
         content_size = len(batch_content.encode("utf-8"))
-        print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+        logger.debug(
+            "发送%s第 %d/%d 批次，大小：%d 字节 [%s]",
+            log_prefix, i, len(batches), content_size, report_type
         )
 
         payload = {
@@ -562,8 +566,9 @@ def send_to_telegram(
     # 逐批发送
     for i, batch_content in enumerate(batches, 1):
         content_size = len(batch_content.encode("utf-8"))
-        print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+        logger.debug(
+            "发送%s第 %d/%d 批次，大小：%d 字节 [%s]",
+            log_prefix, i, len(batches), content_size, report_type
         )
 
         payload = {
@@ -1345,8 +1350,9 @@ def send_to_generic_webhook(
     # 逐批发送
     for i, batch_content in enumerate(batches, 1):
         content_size = len(batch_content.encode("utf-8"))
-        print(
-            f"发送{log_prefix}第 {i}/{len(batches)} 批次，大小：{content_size} 字节 [{report_type}]"
+        logger.debug(
+            "发送%s第 %d/%d 批次，大小：%d 字节 [%s]",
+            log_prefix, i, len(batches), content_size, report_type
         )
 
         try:
