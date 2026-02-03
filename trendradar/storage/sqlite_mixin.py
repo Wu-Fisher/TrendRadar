@@ -11,8 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from trendradar.logging import get_logger
 from trendradar.storage.base import NewsItem, NewsData, RSSItem, RSSData
 from trendradar.utils.url import normalize_url
+
+logger = get_logger(__name__)
 
 
 class SQLiteStorageMixin:
@@ -215,7 +218,7 @@ class SQLiteStorageMixin:
                             new_count += 1
 
                     except sqlite3.Error as e:
-                        print(f"{log_prefix} 保存新闻条目失败 [{item.title[:30]}...]: {e}")
+                        logger.error("%s 保存新闻条目失败 [%s...]: %s", log_prefix, item.title[:30], e)
 
             total_items = new_count + updated_count
 
@@ -307,7 +310,7 @@ class SQLiteStorageMixin:
             return True, new_count, updated_count, title_changed_count, off_list_count
 
         except Exception as e:
-            print(f"{log_prefix} 保存失败: {e}")
+            logger.error("%s 保存失败: %s", log_prefix, e)
             return False, 0, 0, 0, 0
 
     def _get_today_all_data_impl(self, date: Optional[str] = None) -> Optional[NewsData]:
@@ -440,7 +443,7 @@ class SQLiteStorageMixin:
             )
 
         except Exception as e:
-            print(f"[存储] 读取数据失败: {e}")
+            logger.error("读取数据失败: %s", e)
             return None
 
     def _get_latest_crawl_data_impl(self, date: Optional[str] = None) -> Optional[NewsData]:
@@ -572,7 +575,7 @@ class SQLiteStorageMixin:
             )
 
         except Exception as e:
-            print(f"[存储] 获取最新数据失败: {e}")
+            logger.error("获取最新数据失败: %s", e)
             return None
 
     def _detect_new_titles_impl(self, current_data: NewsData) -> Dict[str, Dict]:
@@ -631,7 +634,7 @@ class SQLiteStorageMixin:
             return new_titles
 
         except Exception as e:
-            print(f"[存储] 检测新标题失败: {e}")
+            logger.error("检测新标题失败: %s", e)
             return {}
 
     def _is_first_crawl_today_impl(self, date: Optional[str] = None) -> bool:
@@ -659,7 +662,7 @@ class SQLiteStorageMixin:
             return count <= 1
 
         except Exception as e:
-            print(f"[存储] 检查首次抓取失败: {e}")
+            logger.error("检查首次抓取失败: %s", e)
             return True
 
     def _get_crawl_times_impl(self, date: Optional[str] = None) -> List[str]:
@@ -685,7 +688,7 @@ class SQLiteStorageMixin:
             return [row[0] for row in rows]
 
         except Exception as e:
-            print(f"[存储] 获取抓取时间列表失败: {e}")
+            logger.error("获取抓取时间列表失败: %s", e)
             return []
 
     # ========================================
@@ -718,7 +721,7 @@ class SQLiteStorageMixin:
             return False
 
         except Exception as e:
-            print(f"[存储] 检查推送记录失败: {e}")
+            logger.error("检查推送记录失败: %s", e)
             return False
 
     def _record_push_impl(self, report_type: str, date: Optional[str] = None) -> bool:
@@ -752,7 +755,7 @@ class SQLiteStorageMixin:
             return True
 
         except Exception as e:
-            print(f"[存储] 记录推送失败: {e}")
+            logger.error("记录推送失败: %s", e)
             return False
 
     def _has_ai_analyzed_today_impl(self, date: Optional[str] = None) -> bool:
@@ -781,7 +784,7 @@ class SQLiteStorageMixin:
             return False
 
         except Exception as e:
-            print(f"[存储] 检查 AI 分析记录失败: {e}")
+            logger.error("检查 AI 分析记录失败: %s", e)
             return False
 
     def _record_ai_analysis_impl(self, analysis_mode: str, date: Optional[str] = None) -> bool:
@@ -815,7 +818,7 @@ class SQLiteStorageMixin:
             return True
 
         except Exception as e:
-            print(f"[存储] 记录 AI 分析失败: {e}")
+            logger.error("记录 AI 分析失败: %s", e)
             return False
 
     # ========================================
@@ -918,7 +921,7 @@ class SQLiteStorageMixin:
                                 pass
 
                     except sqlite3.Error as e:
-                        print(f"{log_prefix} 保存 RSS 条目失败 [{item.title[:30]}...]: {e}")
+                        logger.error("%s 保存 RSS 条目失败 [%s...]: %s", log_prefix, item.title[:30], e)
 
             total_items = new_count + updated_count
 
@@ -963,7 +966,7 @@ class SQLiteStorageMixin:
             return True, new_count, updated_count
 
         except Exception as e:
-            print(f"{log_prefix} 保存 RSS 数据失败: {e}")
+            logger.error("%s 保存 RSS 数据失败: %s", log_prefix, e)
             return False, 0, 0
 
     def _get_rss_data_impl(self, date: Optional[str] = None) -> Optional[RSSData]:
@@ -1048,7 +1051,7 @@ class SQLiteStorageMixin:
             )
 
         except Exception as e:
-            print(f"[存储] 读取 RSS 数据失败: {e}")
+            logger.error("读取 RSS 数据失败: %s", e)
             return None
 
     def _detect_new_rss_items_impl(self, current_data: RSSData) -> Dict[str, List[RSSItem]]:
@@ -1105,7 +1108,7 @@ class SQLiteStorageMixin:
             return new_items
 
         except Exception as e:
-            print(f"[存储] 检测新 RSS 条目失败: {e}")
+            logger.error("检测新 RSS 条目失败: %s", e)
             return {}
 
     def _get_latest_rss_data_impl(self, date: Optional[str] = None) -> Optional[RSSData]:
@@ -1196,5 +1199,5 @@ class SQLiteStorageMixin:
             )
 
         except Exception as e:
-            print(f"[存储] 获取最新 RSS 数据失败: {e}")
+            logger.error("获取最新 RSS 数据失败: %s", e)
             return None
