@@ -9,7 +9,7 @@ RUN chmod +x /usr/local/bin/supercronic-linux-amd64 && \
     supercronic -version
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 COPY docker/manage.py .
 COPY trendradar/ ./trendradar/
