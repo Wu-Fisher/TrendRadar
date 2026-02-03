@@ -18,6 +18,10 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 
+from trendradar.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def _parse_word(word: str) -> Dict:
     """
@@ -51,7 +55,7 @@ def _parse_word(word: str) -> Dict:
         pattern_str = regex_match.group(1)
         try:
             pattern = re.compile(pattern_str, re.IGNORECASE)
-            
+
             return {
                 "word": pattern_str,
                 "is_regex": True,
@@ -59,7 +63,7 @@ def _parse_word(word: str) -> Dict:
                 "display_name": display_name,
             }
         except re.error as e:
-            print(f"Warning: Invalid regex pattern '/{pattern_str}/': {e}")
+            logger.warning("Invalid regex pattern '/%s/': %s", pattern_str, e)
             pass
 
     return {
