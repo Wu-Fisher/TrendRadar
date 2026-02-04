@@ -22,6 +22,7 @@ from trendradar.crawler import DataFetcher
 from trendradar.storage import convert_crawl_results_to_news_data
 from trendradar.utils.time import is_within_days
 from trendradar.ai import AIAnalyzer, AIAnalysisResult
+from trendradar.constants import Timeouts
 
 
 def _parse_version(version_str: str) -> Tuple[int, int, int]:
@@ -61,7 +62,7 @@ def _fetch_remote_version(version_url: str, proxy_url: Optional[str] = None) -> 
             "Cache-Control": "no-cache",
         }
 
-        response = requests.get(version_url, proxies=proxies, headers=headers, timeout=10)
+        response = requests.get(version_url, proxies=proxies, headers=headers, timeout=Timeouts.CONTENT_FETCH)
         response.raise_for_status()
         return response.text.strip()
     except Exception as e:

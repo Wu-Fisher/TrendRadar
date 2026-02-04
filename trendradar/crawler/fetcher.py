@@ -17,6 +17,7 @@ from typing import Dict, List, Tuple, Optional, Union
 import requests
 
 from trendradar.logging import get_logger
+from trendradar.constants import Timeouts
 
 logger = get_logger(__name__)
 
@@ -89,7 +90,7 @@ class DataFetcher:
                     url,
                     proxies=proxies,
                     headers=self.DEFAULT_HEADERS,
-                    timeout=10,
+                    timeout=Timeouts.CONTENT_FETCH,
                 )
                 response.raise_for_status()
 

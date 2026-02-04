@@ -38,6 +38,7 @@ from .renderer import (
     render_rss_markdown_content,
 )
 from trendradar.logging import get_logger
+from trendradar.constants import Timeouts
 
 logger = get_logger(__name__)
 
@@ -856,7 +857,7 @@ class NotificationDispatcher:
                     }
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
+                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("飞书%s RSS 通知发送成功", account_label)
@@ -907,7 +908,7 @@ class NotificationDispatcher:
                     }
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
+                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("钉钉%s RSS 通知发送成功", account_label)
@@ -976,7 +977,7 @@ class NotificationDispatcher:
                     }
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
+                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("企业微信%s RSS 通知发送成功", account_label)
@@ -1020,7 +1021,7 @@ class NotificationDispatcher:
                     }
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.post(url, json=payload, proxies=proxies, timeout=30)
+                    resp = requests.post(url, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("Telegram%s RSS 通知发送成功", account_label)
@@ -1064,7 +1065,7 @@ class NotificationDispatcher:
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
                     resp = requests.post(
                         url, data=batch_content.encode("utf-8"),
-                        headers=headers, proxies=proxies, timeout=30
+                        headers=headers, proxies=proxies, timeout=Timeouts.HTTP_REQUEST
                     )
                     resp.raise_for_status()
 
@@ -1101,7 +1102,7 @@ class NotificationDispatcher:
                     url = f"{bark_url.rstrip('/')}/{title}/{body}"
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.get(url, proxies=proxies, timeout=30)
+                    resp = requests.get(url, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("Bark%s RSS 通知发送成功", account_label)
@@ -1144,7 +1145,7 @@ class NotificationDispatcher:
                     }
 
                     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=30)
+                    resp = requests.post(webhook_url, json=payload, proxies=proxies, timeout=Timeouts.HTTP_REQUEST)
                     resp.raise_for_status()
 
                 logger.info("Slack%s RSS 通知发送成功", account_label)
